@@ -82,7 +82,10 @@ def save_to_gsheet(data: list, base_name: str):
     if not data:
         ws.clear()
         return
-    df = pd.DataFrame(data)
+        df = pd.DataFrame(data)
+    df = df.fillna("")  # NaN → ""
+    df = df.replace({None: ""})  # None → ""
+    df = df.astype(str)
     ws.clear()
     ws.update([df.columns.values.tolist()] + df.values.tolist())
 
@@ -95,7 +98,17 @@ def load_from_gsheet(base_name: str) -> list:
         return []
 
 def save_missing_to_gsheet(data: list):
-    save_to_gsheet(data, WORKSHEET_NAMES[option] + "_مفقودة")
+    if not data:
+        ws = get_worksheet(WORKSHEET_NAMES[option] + "_مفقودة")
+        ws.clear()
+        return
+    
+    df = pd.DataFrame(data)
+    df = df.fillna("")
+    df = df.replace({None: ""})
+    df = df.astype(str)
+    
+    save_to_gsheet(df.to_dict("records"), WORKSHEET_NAMES[option] + "_مفقودة")
 
 def load_missing_from_gsheet() -> list:
     return load_from_gsheet(WORKSHEET_NAMES[option] + "_مفقودة")
@@ -691,6 +704,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
