@@ -19,10 +19,26 @@ try:
     ]
     creds = Credentials.from_service_account_info(st.secrets["google"], scopes=scopes)
     client = gspread.authorize(creds)
-    SPREADSHEET_NAME = "Diwan_Legs"  
+    
+    SPREADSHEET_NAME = "Diwan_Legs"  # تأكد إنه بالضبط كده
+    
+    st.info("جاري الاتصال بـ Google Sheets...")
     spreadsheet = client.open(SPREADSHEET_NAME)
+    st.success("✔️ تم الاتصال بـ Google Sheets بنجاح!")
+    
+except gspread.exceptions.SpreadsheetNotFound:
+    st.error("❌ الملف 'Diwan_Legs' غير موجود أو الاسم غلط.")
+    st.error("تأكد من الاسم بالضبط (حساس للحروف الكبيرة والصغيرة والمسافات)")
+    st.stop()
+    
+except gspread.exceptions.APIError as e:
+    st.error("❌ خطأ في الصلاحيات أو API")
+    st.error(f"الخطأ: {e}")
+    st.stop()
+    
 except Exception as e:
-    st.error("فشل الاتصال بـ Google Sheets. تأكد من Secrets والمشاركة مع Service Account.")
+    st.error("❌ خطأ غير متوقع في الاتصال")
+    st.error(f"التفاصيل: {str(e)}")
     st.stop()
 
 WORKSHEET_NAMES = {
@@ -675,4 +691,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
