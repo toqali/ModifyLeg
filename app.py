@@ -57,8 +57,8 @@ def authenticate(username: str, password: str) -> bool:
         user_row = users_df[users_df['Username'] == username]
         if user_row.empty:
             return False
-        stored_hash = user_row['Password'].iloc[0]
-        return hash_password(password) == stored_hash
+        stored_password = user_row['Password'].iloc[0]
+        return password == stored_password  # مقارنة مباشرة بدون hash
     except:
         return False
 
@@ -768,3 +768,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
