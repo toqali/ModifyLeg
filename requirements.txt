@@ -1,8 +1,6 @@
 streamlit
 pandas
 openpyxl
-python-dateutil
-gspread
+gspread==5.12.1
 oauth2client
-gspread-pandas
-
+google-auth
