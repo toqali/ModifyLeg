@@ -52,6 +52,7 @@ def authenticate(username: str, password: str) -> bool:
         if not records:
             return False
         users_df = pd.DataFrame(records)
+        users_df.columns = users_df.columns.str.strip()
         if 'Username' not in users_df.columns or 'Password' not in users_df.columns:
             return False
         user_row = users_df[users_df['Username'] == username]
@@ -768,4 +769,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
