@@ -1,6 +1,6 @@
 """
 نظام مقارنة التشريعات القانونية
-مع حفظ دائم على Google Sheets + دعم عدة مستخدمين مستقلين
+مع حفظ دائم للنتائج والتقدم على Google Sheets + دعم عدة مستخدمين مستقلين
 جاهز للعمل 100% - ديسمبر 2025
 """
 import streamlit as st
@@ -19,26 +19,25 @@ try:
     ]
     creds = Credentials.from_service_account_info(st.secrets["google"], scopes=scopes)
     client = gspread.authorize(creds)
-    
-    SPREADSHEET_NAME = "Diwan_Legs"  # تأكد إنه بالضبط كده
-    
+   
+    SPREADSHEET_NAME = "Diwan_Legs"  # اسم الملف بالضبط في Google Drive
+   
     st.info("جاري محاولة الاتصال بـ Google Sheets باسم 'Diwan_Legs'...")
     spreadsheet = client.open(SPREADSHEET_NAME)
     st.success("✔️ تم الاتصال بنجاح! التطبيق شغال دلوقتي.")
-    
+   
 except gspread.exceptions.SpreadsheetNotFound:
     st.error("❌ الملف 'Diwan_Legs' مش موجود أو الاسم غلط بالحرف.")
-    st.error("تأكد من الاسم في Google Drive بالضبط (حساس للحروف الكبيرة والـ underscore)")
     st.stop()
-    
+   
 except gspread.exceptions.APIError as e:
     st.error("❌ خطأ في الصلاحيات أو الـ API")
-    st.code(str(e))  # هيطبع الخطأ الحقيقي
+    st.code(str(e))
     st.stop()
-    
+   
 except Exception as e:
     st.error("❌ خطأ غير متوقع")
-    st.code(str(e))  # هيطبع التفاصيل الكاملة
+    st.code(str(e))
     st.stop()
 
 WORKSHEET_NAMES = {
@@ -56,7 +55,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# اسم المستخدم
 st.sidebar.header("👤 إعدادات المستخدم")
 user_name = st.sidebar.text_input("اكتب اسمك هنا", value="مستخدم1", help="للحفظ الشخصي المستقل").strip()
 
@@ -75,28 +73,22 @@ def get_worksheet(base_name: str, suffix: str = ""):
     try:
         return spreadsheet.worksheet(sheet_title)
     except gspread.exceptions.WorksheetNotFound:
+        st.info(f"إنشاء شيت جديد: {sheet_title}")
         return spreadsheet.add_worksheet(title=sheet_title, rows=1000, cols=30)
 
 def save_to_gsheet(data: list, base_name: str):
     ws = get_worksheet(base_name)
     
-    # لو مفيش بيانات
     if not data or len(data) == 0:
         ws.clear()
         ws.append_row(["لا توجد بيانات محفوظة بعد"])
         return
     
-    # إنشاء DataFrame بأمان
     df = pd.DataFrame(data)
-    
-    # تنظيف البيانات من NaN و None وتواريخ فاضية
     df = df.fillna("")
     df = df.replace({None: "", pd.NaT: ""})
-    
-    # تحويل كل القيم لـ string عشان Google Sheets يقبلها
     df = df.astype(str)
     
-    # حفظ البيانات
     try:
         ws.clear()
         ws.update([df.columns.values.tolist()] + df.values.tolist())
@@ -135,6 +127,38 @@ def save_missing_to_gsheet(data: list):
 def load_missing_from_gsheet() -> list:
     return load_from_gsheet(WORKSHEET_NAMES[option] + "_مفقودة")
 
+# ==================== حفظ واسترجاع التقدم دائمًا ====================
+def get_progress_worksheet():
+    sheet_title = f"{user_name}_تقدم_{option}"
+    try:
+        return spreadsheet.worksheet(sheet_title)
+    except gspread.exceptions.WorksheetNotFound:
+        ws = spreadsheet.add_worksheet(title=sheet_title, rows=10, cols=3)
+        ws.append_row(["current_index", "max_reached_idx", "last_updated"])
+        return ws
+
+def save_progress(current_idx: int, max_reached: int):
+    ws = get_progress_worksheet()
+    try:
+        ws.clear()
+        ws.append_row(["current_index", "max_reached_idx", "last_updated"])
+        ws.append_row([str(current_idx), str(max_reached), datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
+    except Exception as e:
+        st.warning("خطأ في حفظ التقدم")
+
+def load_progress() -> tuple[int, int]:
+    try:
+        ws = get_progress_worksheet()
+        records = ws.get_all_records()
+        if records:
+            last = records[-1]
+            current = int(last.get("current_index", 0))
+            max_r = int(last.get("max_reached_idx", 0))
+            return current, max_r
+    except:
+        pass
+    return 0, 0
+
 # ==================== Session Manager ====================
 class SessionManager:
     @staticmethod
@@ -156,11 +180,12 @@ class SessionManager:
         if malq_key not in st.session_state:
             st.session_state[malq_key] = load_missing_from_gsheet()
 
-        if idx_key not in st.session_state:
-            st.session_state[idx_key] = 0
-            st.session_state[max_key] = 0
-            st.session_state[next_key] = False
-            st.session_state[form_key] = False
+        # استرجاع التقدم الدائم
+        current_idx, max_reached = load_progress()
+        st.session_state[idx_key] = current_idx
+        st.session_state[max_key] = max_reached
+        st.session_state[next_key] = False
+        st.session_state[form_key] = False
 
     @staticmethod
     def save_persistent():
@@ -190,14 +215,19 @@ def move_to_next_record(total_records: int, current_index: int) -> None:
     next_key = SessionManager.get_unique_key("show_next_in_review")
 
     if current_index + 1 < total_records:
-        st.session_state[idx_key] += 1
-        st.session_state[max_key] = max(st.session_state.get(max_key, 0), current_index + 1)
+        new_index = current_index + 1
+        st.session_state[idx_key] = new_index
+        new_max = max(st.session_state.get(max_key, 0), new_index)
+        st.session_state[max_key] = new_max
         st.session_state[next_key] = False
+        
+        save_progress(new_index, new_max)
         save_persistent_data()
         st.rerun()
     else:
         st.balloons()
         st.success("تم الانتهاء من جميع السجلات!")
+        save_progress(current_index + 1, current_index + 1)
 
 # ==================== تحميل البيانات الأصلية ====================
 @st.cache_data
@@ -208,11 +238,9 @@ def load_csv_data(kind: str):
         'تعليمات': {'qis': r'extData/Instructions/Qis_Instructions.xlsx', 'diwan': r'extData/Instructions/Diwan_Instructions.xlsx'},
         'اتفاقيات': {'qis': r'extData/Agreements/Qis_Agreements.xlsx', 'diwan': r'extData/Agreements/Diwan_Agreements.xlsx'},
     }
-
     if kind not in PATHS:
         st.error(f"النوع '{kind}' غير مدعوم.")
         return None, None
-
     def read_excel_safely(path, name):
         if not os.path.exists(path):
             st.error(f"الملف غير موجود: {path}")
@@ -224,7 +252,6 @@ def load_csv_data(kind: str):
         except Exception as e:
             st.error(f"خطأ في تحميل {name}: {e}")
             return None
-
     qis_df = read_excel_safely(PATHS[kind]['qis'], "قسطاس")
     diwan_df = read_excel_safely(PATHS[kind]['diwan'], "الديوان")
     if qis_df is None or diwan_df is None:
@@ -321,10 +348,8 @@ def render_wizard_steps(current_index: int, total_records: int):
 def render_law_comparison(qistas_df: pd.DataFrame, diwan_df: pd.DataFrame, current_index: int, total_records: int):
     qistas_data = get_legislation_data(current_index, qistas_df)
     diwan_data = get_legislation_data(current_index, diwan_df)
-
     st.markdown("<h3 style='color: #667eea !important; text-align: center;'>المقارنة التفصيلية</h3>", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
-
     FIELD_MAPPING = {
         "نظام": {"name_qis": "LegName", "name_diw": "ByLawName", "num_qis": "LegNumber", "num_diw": "ByLawNumber"},
         "قانون": {"name_qis": "LegName", "name_diw": "Law_Name", "num_qis": "LegNumber", "num_diw": "Law_Number"},
@@ -332,7 +357,6 @@ def render_law_comparison(qistas_df: pd.DataFrame, diwan_df: pd.DataFrame, curre
         "اتفاقيات": {"name_qis": "LegName", "name_diw": "Agreement_Name", "num_qis": "LegNumber", "num_diw": "Agreement_Number"},
     }
     mapping = FIELD_MAPPING.get(option, FIELD_MAPPING["نظام"])
-
     DISPLAY_FIELDS = [
         ("اسم التشريع", mapping["name_qis"], mapping["name_diw"]),
         ("رقم التشريع", mapping["num_qis"], mapping["num_diw"]),
@@ -342,16 +366,13 @@ def render_law_comparison(qistas_df: pd.DataFrame, diwan_df: pd.DataFrame, curre
         ("تاريخ السريان", "ActiveDate", "Active_Date"),
         ("الحالة", "Status", "Status"),
     ]
-
     CONDITIONAL_FIELDS = [
         ("ألغي بواسطة", "Canceled By", "Canceled_By"),
         ("تاريخ الانتهاء", "EndDate", "EndDate"),
         ("تم استبداله بواسطة", "Replaced By", "Replaced_By"),
     ]
-
     status_q_int = parse_status(qistas_data.get('Status'))
     rows = []
-
     for label, q_key, d_key in DISPLAY_FIELDS:
         qv = qistas_data.get(q_key, '')
         dv = diwan_data.get(d_key, '')
@@ -359,7 +380,6 @@ def render_law_comparison(qistas_df: pd.DataFrame, diwan_df: pd.DataFrame, curre
         d_str = '—' if pd.isna(dv) or str(dv).strip() == '' else str(dv)
         diff_class = 'cmp-diff' if q_str != '—' and d_str != '—' and q_str != d_str else ''
         rows.append((label, q_str, d_str, diff_class))
-
     if status_q_int == 2:
         for label, q_key, d_key in CONDITIONAL_FIELDS:
             qv = qistas_data.get(q_key, '')
@@ -370,7 +390,6 @@ def render_law_comparison(qistas_df: pd.DataFrame, diwan_df: pd.DataFrame, curre
                 continue
             diff_class = 'cmp-diff' if q_str != '—' and d_str != '—' and q_str != d_str else ''
             rows.append((label, q_str, d_str, diff_class))
-
     if rows:
         html = ["<div class='cmp-wrapper'><table class='cmp-table'>"]
         html.append("<thead><tr><th>اسم الحقل</th><th>قسطاس</th><th>الديوان</th></tr></thead><tbody>")
@@ -380,7 +399,6 @@ def render_law_comparison(qistas_df: pd.DataFrame, diwan_df: pd.DataFrame, curre
         st.markdown("\n".join(html), unsafe_allow_html=True)
     else:
         st.info("لا توجد بيانات للمقارنة في هذا السجل.")
-
     render_selection_buttons(qistas_data, diwan_data, current_index, total_records)
     render_navigation_buttons(current_index, total_records)
 
@@ -388,25 +406,24 @@ def render_selection_buttons(qistas_data: dict, diwan_data: dict, current_index:
     st.markdown("---")
     st.markdown("<h3 style='color: white !important; text-align: center; margin-top: 2rem;'>❓ أيهما أكثر دقة؟</h3>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns(3)
-    
+   
     with col1:
         if st.button("✅ قسطاس صحيح", use_container_width=True):
             save_comparison_record(qistas_data, 'قسطاس')
             st.success("تم حفظ النتيجة من قسطاس!")
             move_to_next_record(total_records, current_index)
-    
+   
     with col2:
         if st.button("✅ الديوان صحيح", use_container_width=True):
             save_comparison_record(diwan_data, 'الديوان')
             st.success("تم حفظ النتيجة من الديوان!")
             move_to_next_record(total_records, current_index)
-    
+   
     with col3:
         form_key = SessionManager.get_unique_key('show_custom_form')
         if st.button("⚠️ لا أحد منهم", use_container_width=True):
             st.session_state[form_key] = True
             st.rerun()
-
     if st.session_state.get(SessionManager.get_unique_key('show_custom_form'), False):
         render_custom_form(qistas_data, current_index, total_records)
 
@@ -442,24 +459,27 @@ def render_navigation_buttons(current_index: int, total_records: int):
     form_key = SessionManager.get_unique_key('show_custom_form')
     next_key = SessionManager.get_unique_key('show_next_in_review')
     max_key = SessionManager.get_unique_key('max_reached_idx')
-
     with col1:
         if current_index > 0:
             if st.button("⏮️ السابق", use_container_width=True):
-                st.session_state[idx_key] -= 1
+                new_idx = current_index - 1
+                st.session_state[idx_key] = new_idx
                 st.session_state[form_key] = False
                 st.session_state[next_key] = True
+                save_progress(new_idx, st.session_state[max_key])
                 save_persistent_data()
                 st.rerun()
-    
+   
     with col3:
         max_reached = st.session_state.get(max_key, 0)
         show_next = st.session_state.get(next_key, False)
         if current_index < total_records - 1 and show_next and current_index < max_reached:
             if st.button("⏭️ التالي", use_container_width=True, type="primary"):
-                st.session_state[idx_key] += 1
-                if st.session_state[idx_key] >= max_reached:
+                new_idx = current_index + 1
+                st.session_state[idx_key] = new_idx
+                if new_idx >= max_reached:
                     st.session_state[next_key] = False
+                save_progress(new_idx, max_reached)
                 save_persistent_data()
                 st.rerun()
 
@@ -469,19 +489,14 @@ def render_comparison_tab(qistas_df: pd.DataFrame, diwan_df: pd.DataFrame):
     next_key = SessionManager.get_unique_key('show_next_in_review')
     if st.session_state.get(form_key, False):
         st.session_state[next_key] = False
-
     total_records = min(len(qistas_df), len(diwan_df))
     idx_key = SessionManager.get_unique_key('current_index')
     current_index = st.session_state[idx_key]
-
     progress_percentage = int(((current_index + 1) / total_records) * 100) if total_records > 0 else 0
     st.markdown(f"<div class='wizard-container'><h3 style='color: #667eea; text-align: center;'>مقارنة التشريعات</h3><p style='text-align: center;'>{current_index + 1} من {total_records} ({progress_percentage}%)</p></div>", unsafe_allow_html=True)
-
     if total_records > 0:
         render_wizard_steps(current_index, total_records)
-
     st.markdown(f"<div style='background: #e2e8f0; height: 15px; border-radius: 10px; overflow: hidden; margin: 1.5rem 0 2rem 0;'><div style='height: 100%; background: linear-gradient(90deg, #667eea 0%, #48bb78 100%); width: {progress_percentage}%;'></div></div>", unsafe_allow_html=True)
-
     if current_index < total_records:
         render_law_comparison(qistas_df, diwan_df, current_index, total_records)
     else:
@@ -489,9 +504,9 @@ def render_comparison_tab(qistas_df: pd.DataFrame, diwan_df: pd.DataFrame):
         if st.button("البدء من جديد"):
             st.session_state[idx_key] = 0
             st.session_state[SessionManager.get_unique_key('show_custom_form')] = False
+            save_progress(0, 0)
             save_persistent_data()
             st.rerun()
-
     st.markdown("</div>", unsafe_allow_html=True)
 
 def render_missing_malq_tab():
@@ -501,17 +516,14 @@ def render_missing_malq_tab():
         'تعليمات': r'extData/Instructions/Qis_Instructions_Missing.xlsx',
         'اتفاقيات': r'extData/Agreements/Qis_Agreements_Missing.xlsx',
     }
-
     MALQ_PATH = MALQ_PATHS.get(option)
     if not MALQ_PATH or not os.path.exists(MALQ_PATH):
         st.error(f"ملف القيم المفقودة غير موجود للنوع: **{option}**")
         st.stop()
-
     if st.session_state.get('malq_current_kind') != option or 'malq_records' not in st.session_state:
         for k in list(st.session_state.keys()):
             if k.startswith('malq_') and k not in ['malq_current_kind']:
                 del st.session_state[k]
-
         df = pd.read_excel(MALQ_PATH).fillna("")
         st.session_state.malq_records = df.to_dict("records")
         st.session_state.malq_current_kind = option
@@ -519,27 +531,21 @@ def render_missing_malq_tab():
         st.session_state.malq_saved_records = {}
         st.session_state.malq_max_reached_idx = 0
         st.session_state.show_next_in_review = False
-
     malq_saved_key = SessionManager.get_unique_key("malq_completed")
     st.session_state[malq_saved_key] = load_missing_from_gsheet()
-
     records = st.session_state.malq_records
     total = len(records)
     i = st.session_state.malq_idx = max(0, min(st.session_state.malq_idx, total - 1))
     current_record = records[i]
-
     st.progress((i + 1) / total, text=f"السجل {i + 1} من {total}")
-
     arabic_labels = {
         "LegName": "اسم التشريع", "DetailedName": "الاسم التفصيلي", "LegNumber": "رقم التشريع",
         "Year": "السنة", "Replaced For": "حل محل", "ActiveDate": "تاريخ السريان",
         "Status": "الحالة", "Canceled By": "ألغي بموجب", "EndDate": "تاريخ الانتهاء",
         "Replaced By": "استبدل بـ"
     }
-
     status_val = str(current_record.get("Status", "")).strip()
     is_active = status_val in ["ساري", "1", "سارية المفعول", "سارية"]
-
     display_data = []
     legname_val = current_record.get("LegName")
     if pd.isna(legname_val) or str(legname_val).strip() in ["", "nan"]:
@@ -550,7 +556,6 @@ def render_missing_malq_tab():
         label_name = arabic_labels["LegName"]
     if legname_val:
         display_data.append({"الحقل": f"<strong>{label_name}</strong>", "القيمة": legname_val})
-
     for key in ["LegNumber", "Year", "Replaced For", "ActiveDate", "Status"]:
         val = current_record.get(key, "")
         clean_val = str(val).strip() if pd.notna(val) else ""
@@ -558,7 +563,6 @@ def render_missing_malq_tab():
             clean_val = clean_val.split(".")[0]
         if clean_val or key in ["LegNumber", "Year"]:
             display_data.append({"الحقل": f"<strong>{arabic_labels.get(key, key)}</strong>", "القيمة": clean_val})
-
     if not is_active:
         for key in ["EndDate", "Canceled By", "Replaced By", "Replaced For"]:
             val = current_record.get(key, "")
@@ -567,7 +571,6 @@ def render_missing_malq_tab():
                     "الحقل": f"<strong style='color:#dc2626;'>{arabic_labels.get(key, key)}</strong>",
                     "القيمة": f"<strong>{str(val).strip()}</strong>"
                 })
-
     st.markdown("""
         <style>
             .compact-malq-container {max-height: 380px; overflow-y: auto; border-radius: 14px; border: 1px solid #c7d2fe;}
@@ -577,27 +580,22 @@ def render_missing_malq_tab():
             .compact-malq-table td:first-child {font-weight: 700; color: #1e293b; width: 40%; background: #f8fafc;}
         </style>
     """, unsafe_allow_html=True)
-
     df_display = pd.DataFrame(display_data)
     st.markdown(f"<div class='compact-malq-container'>{df_display.to_html(classes='compact-malq-table', index=False, escape=False)}</div>", unsafe_allow_html=True)
-
     st.markdown("### هل هذا التشريع صحيح كما هو؟")
     choice = st.radio("", ["نعم، صحيح تمامًا", "لا، يحتاج تعديل"], index=None, label_visibility="collapsed")
-
     if choice == "نعم، صحيح تمامًا":
         st.session_state.malq_source_choice = True
         st.session_state.malq_manual_entry = False
     elif choice == "لا، يحتاج تعديل":
         st.session_state.malq_manual_entry = True
         st.session_state.malq_source_choice = False
-
     if st.session_state.get("malq_source_choice"):
         st.markdown("### أكمل القيم الفارغة")
         with st.form(key=f"fill_{i}"):
             required = [f for f in arabic_labels.keys() if str(current_record.get(f, "")).strip() == "" and not (f in ["EndDate", "Canceled By", "Replaced By"] and is_active)]
             for key in required:
                 st.text_input(arabic_labels[key], value=current_record.get(key, ""), key=f"f_{key}_{i}")
-
             c1, c2 = st.columns(2)
             with c1:
                 if st.form_submit_button("حفظ والانتقال", use_container_width=True, type="primary"):
@@ -625,7 +623,6 @@ def render_missing_malq_tab():
                             st.success("انتهيت من جميع السجلات!")
             with c2:
                 st.form_submit_button("إلغاء", use_container_width=True, on_click=lambda: st.rerun())
-
     if st.session_state.get("malq_manual_entry"):
         st.markdown("### عدّل جميع الحقول")
         with st.form(key=f"manual_{i}"):
@@ -635,7 +632,6 @@ def render_missing_malq_tab():
                 if key == "Year" and val.endswith(".0"):
                     val = val[:-2]
                 st.text_input(arabic_labels.get(key, key), value=val, key=f"m_{key}_{i}")
-
             c1, c2 = st.columns(2)
             with c1:
                 if st.form_submit_button("حفظ والانتقال", use_container_width=True, type="primary"):
@@ -663,7 +659,6 @@ def render_missing_malq_tab():
                             st.success("انتهيت!")
             with c2:
                 st.form_submit_button("إلغاء", use_container_width=True, on_click=lambda: st.rerun())
-
     col1, col2, col3 = st.columns([2, 1, 2])
     with col1:
         if i > 0:
@@ -675,7 +670,6 @@ def render_missing_malq_tab():
 def render_saved_data_tab():
     st.markdown("<div class='comparison-card'>", unsafe_allow_html=True)
     st.markdown(f"<h2 style='color: #667eea !important; text-align: center;'>البيانات المحفوظة - {option} ({user_name})</h2>", unsafe_allow_html=True)
-
     data = load_from_gsheet(WORKSHEET_NAMES[option])
     if data:
         df = pd.DataFrame(data)
@@ -686,7 +680,6 @@ def render_saved_data_tab():
         st.download_button("تحميل نتائج المقارنة", buffer, f"{option}_مقارنة_{user_name}.xlsx", use_container_width=True)
     else:
         st.info("لا توجد نتائج محفوظة بعد")
-
     missing = load_missing_from_gsheet()
     if missing:
         df_miss = pd.DataFrame(missing)
@@ -697,7 +690,6 @@ def render_saved_data_tab():
         st.download_button("تحميل القيم المفقودة المصححة", buffer_miss, f"{option}_مفقودة_{user_name}.xlsx", use_container_width=True)
     else:
         st.info("لا توجد قيم مفقودة مصححة بعد")
-
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ==================== main ====================
@@ -707,16 +699,13 @@ def main():
         <div class="title-container">
             <h1 style='color: #667eea; margin: 0;'>⚖️ نظام التحقق من التشريعات القانونية</h1>
             <p style='color: #718096; margin-top: 0.5rem; font-size: 18px;'>
-                مقارنة شاملة بين قسطاس والديوان - حفظ دائم على Google Sheets
+                مقارنة شاملة بين قسطاس والديوان - حفظ دائم للنتائج والتقدم
             </p>
         </div>
     """, unsafe_allow_html=True)
-
     initialize_session_state()
     qis_df, diw_df = load_csv_data(option)
-
     tab1, tab2, tab3 = st.tabs(["🔍 مقارنة تفصيلية", "📁 البيانات المحفوظة", "⚠️ قيم مفقودة"])
-
     with tab1:
         render_comparison_tab(qis_df, diw_df)
     with tab2:
@@ -726,10 +715,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
