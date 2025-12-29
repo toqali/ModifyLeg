@@ -84,7 +84,7 @@ if not st.session_state.authenticated:
             else:
                 print(username)
                 print(password)
-                st.error("❌ اسم مستخدم أو كلمة مرور غير صحيحة")
+                st.error(f"❌ اسم مستخدم أو كلمة مرور غير صحيحة    {username}, {password}")
     st.stop()
 
 # المستخدم مسجل دخول
@@ -771,6 +771,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
