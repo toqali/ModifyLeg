@@ -80,18 +80,20 @@ def get_worksheet(base_name: str, suffix: str = ""):
 def save_to_gsheet(data: list, base_name: str):
     ws = get_worksheet(base_name)
     
-    # لو البيانات فاضية
+    # لو مفيش بيانات
     if not data or len(data) == 0:
         ws.clear()
         ws.append_row(["لا توجد بيانات محفوظة بعد"])
         return
     
-    # تحويل البيانات لـ DataFrame بأمان
+    # إنشاء DataFrame بأمان
     df = pd.DataFrame(data)
     
-    # تنظيف البيانات
+    # تنظيف البيانات من NaN و None وتواريخ فاضية
     df = df.fillna("")
     df = df.replace({None: "", pd.NaT: ""})
+    
+    # تحويل كل القيم لـ string عشان Google Sheets يقبلها
     df = df.astype(str)
     
     # حفظ البيانات
@@ -99,7 +101,7 @@ def save_to_gsheet(data: list, base_name: str):
         ws.clear()
         ws.update([df.columns.values.tolist()] + df.values.tolist())
     except Exception as e:
-        st.error("خطأ في حفظ البيانات على Google Sheets")
+        st.error("خطأ أثناء الحفظ على Google Sheets")
         st.code(str(e))
 
 def load_from_gsheet(base_name: str) -> list:
@@ -127,7 +129,7 @@ def save_missing_to_gsheet(data: list):
         ws.clear()
         ws.update([df.columns.values.tolist()] + df.values.tolist())
     except Exception as e:
-        st.error("خطأ في حفظ القيم المفقودة")
+        st.error("خطأ أثناء حفظ القيم المفقودة")
         st.code(str(e))
 
 def load_missing_from_gsheet() -> list:
@@ -724,6 +726,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
