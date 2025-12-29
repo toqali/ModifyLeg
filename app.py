@@ -81,11 +81,16 @@ def save_to_gsheet(data: list, base_name: str):
     ws = get_worksheet(base_name)
     if not data:
         ws.clear()
+        ws.append_row(["لا توجد بيانات محفوظة بعد"])
         return
-        df = pd.DataFrame(data)
-    df = df.fillna("")  # NaN → ""
-    df = df.replace({None: ""})  # None → ""
+    
+    df = pd.DataFrame(data)
+    
+    df = df.fillna("")
+    df = df.replace({None: ""})
     df = df.astype(str)
+    
+    # مسح الشيت وحفظ البيانات الجديدة
     ws.clear()
     ws.update([df.columns.values.tolist()] + df.values.tolist())
 
@@ -101,6 +106,7 @@ def save_missing_to_gsheet(data: list):
     if not data:
         ws = get_worksheet(WORKSHEET_NAMES[option] + "_مفقودة")
         ws.clear()
+        ws.append_row(["لا توجد بيانات محفوظة بعد"])
         return
     
     df = pd.DataFrame(data)
@@ -108,7 +114,9 @@ def save_missing_to_gsheet(data: list):
     df = df.replace({None: ""})
     df = df.astype(str)
     
-    save_to_gsheet(df.to_dict("records"), WORKSHEET_NAMES[option] + "_مفقودة")
+    ws = get_worksheet(WORKSHEET_NAMES[option] + "_مفقودة")
+    ws.clear()
+    ws.update([df.columns.values.tolist()] + df.values.tolist())
 
 def load_missing_from_gsheet() -> list:
     return load_from_gsheet(WORKSHEET_NAMES[option] + "_مفقودة")
@@ -704,6 +712,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
