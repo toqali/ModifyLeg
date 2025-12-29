@@ -19,7 +19,7 @@ try:
     ]
     creds = Credentials.from_service_account_info(st.secrets["google"], scopes=scopes)
     client = gspread.authorize(creds)
-    SPREADSHEET_NAME = "Legislation_Comparison_Data"  # غيّر الاسم لو مختلف عندك
+    SPREADSHEET_NAME = "Diwan_Legs"  
     spreadsheet = client.open(SPREADSHEET_NAME)
 except Exception as e:
     st.error("فشل الاتصال بـ Google Sheets. تأكد من Secrets والمشاركة مع Service Account.")
@@ -675,3 +675,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
