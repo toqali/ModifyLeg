@@ -1,6 +1,6 @@
 """
 نظام مقارنة التشريعات القانونية
-مع حفظ دائم للنتائج والتقدم على Google Sheets + دعم عدة مستخدمين مستقلين
+مع تسجيل دخول (يوزر + باسورد) + حفظ دائم للنتائج والتقدم لكل مستخدم
 جاهز للعمل 100% - ديسمبر 2025
 """
 import streamlit as st
@@ -10,6 +10,7 @@ import io
 import os
 import gspread
 from google.oauth2.service_account import Credentials
+import hashlib
 
 # ==================== ربط Google Sheets ====================
 try:
@@ -40,6 +41,59 @@ except Exception as e:
     st.code(str(e))
     st.stop()
 
+# ==================== دوال تسجيل الدخول ====================
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def authenticate(username: str, password: str) -> bool:
+    try:
+        users_ws = spreadsheet.worksheet("Users")
+        records = users_ws.get_all_records()
+        if not records:
+            return False
+        users_df = pd.DataFrame(records)
+        if 'Username' not in users_df.columns or 'Password' not in users_df.columns:
+            return False
+        user_row = users_df[users_df['Username'] == username]
+        if user_row.empty:
+            return False
+        stored_hash = user_row['Password'].iloc[0]
+        return hash_password(password) == stored_hash
+    except:
+        return False
+
+# ==================== جلسة تسجيل الدخول ====================
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+    st.session_state.user_name = None
+
+if not st.session_state.authenticated:
+    st.markdown("<h1 style='text-align: center; color: #667eea;'>🔐 تسجيل الدخول إلى النظام</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center;'>أدخل اسم المستخدم وكلمة المرور للمتابعة</p>", unsafe_allow_html=True)
+    with st.form("login_form", clear_on_submit=False):
+        username = st.text_input("اسم المستخدم", placeholder="مثال: admin")
+        password = st.text_input("كلمة المرور", type="password", placeholder="أدخل كلمة المرور")
+        submit = st.form_submit_button("دخول", use_container_width=True)
+        if submit:
+            if authenticate(username, password):
+                st.session_state.authenticated = True
+                st.session_state.user_name = username
+                st.success(f"✅ مرحباً {username}! تم تسجيل الدخول بنجاح")
+                st.rerun()
+            else:
+                st.error("❌ اسم مستخدم أو كلمة مرور غير صحيحة")
+    st.stop()
+
+# المستخدم مسجل دخول
+user_name = st.session_state.user_name
+st.sidebar.success(f"👤 المستخدم: {user_name}")
+
+# زر تسجيل الخروج
+if st.sidebar.button("تسجيل الخروج"):
+    st.session_state.authenticated = False
+    st.session_state.user_name = None
+    st.rerun()
+
 WORKSHEET_NAMES = {
     'نظام': 'نظام',
     'قانون': 'قانون',
@@ -54,13 +108,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-st.sidebar.header("👤 إعدادات المستخدم")
-user_name = st.sidebar.text_input("اكتب اسمك هنا", value="مستخدم1", help="للحفظ الشخصي المستقل").strip()
-
-if not user_name:
-    st.warning("اكتب اسمك عشان تبدأ")
-    st.stop()
 
 st.sidebar.header("📋 نوع التشريع")
 option = st.sidebar.radio("اختر نوع البيانات:", ["نظام", "قانون", "تعليمات", "اتفاقيات"])
