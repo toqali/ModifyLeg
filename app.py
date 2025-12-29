@@ -133,8 +133,9 @@ def get_progress_worksheet():
     try:
         return spreadsheet.worksheet(sheet_title)
     except gspread.exceptions.WorksheetNotFound:
-        ws = spreadsheet.add_worksheet(title=sheet_title, rows=10, cols=3)
+        ws = spreadsheet.add_worksheet(title=sheet_title, rows=100, cols=3)
         ws.append_row(["current_index", "max_reached_idx", "last_updated"])
+        ws.append_row(["0", "0", datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
         return ws
 
 def save_progress(current_idx: int, max_reached: int):
@@ -144,7 +145,7 @@ def save_progress(current_idx: int, max_reached: int):
         ws.append_row(["current_index", "max_reached_idx", "last_updated"])
         ws.append_row([str(current_idx), str(max_reached), datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
     except Exception as e:
-        st.warning("خطأ في حفظ التقدم")
+        st.warning("خطأ في حفظ التقدم (بس البيانات محفوظة)")
 
 def load_progress() -> tuple[int, int]:
     try:
@@ -155,9 +156,11 @@ def load_progress() -> tuple[int, int]:
             current = int(last.get("current_index", 0))
             max_r = int(last.get("max_reached_idx", 0))
             return current, max_r
-    except:
-        pass
-    return 0, 0
+        else:
+            return 0, 0
+    except Exception as e:
+        st.warning("خطأ في تحميل التقدم، هيبدأ من الصفر")
+        return 0, 0
 
 # ==================== Session Manager ====================
 class SessionManager:
@@ -180,12 +183,15 @@ class SessionManager:
         if malq_key not in st.session_state:
             st.session_state[malq_key] = load_missing_from_gsheet()
 
-        # استرجاع التقدم الدائم
+        # استرجاع التقدم الدائم من الشيت
         current_idx, max_reached = load_progress()
         st.session_state[idx_key] = current_idx
         st.session_state[max_key] = max_reached
         st.session_state[next_key] = False
         st.session_state[form_key] = False
+
+        # حفظ التقدم فورًا للأمان
+        save_progress(current_idx, max_reached)
 
     @staticmethod
     def save_persistent():
