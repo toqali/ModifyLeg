@@ -79,20 +79,28 @@ def get_worksheet(base_name: str, suffix: str = ""):
 
 def save_to_gsheet(data: list, base_name: str):
     ws = get_worksheet(base_name)
-    if not data:
+    
+    # لو البيانات فاضية
+    if not data or len(data) == 0:
         ws.clear()
         ws.append_row(["لا توجد بيانات محفوظة بعد"])
         return
     
+    # تحويل البيانات لـ DataFrame بأمان
     df = pd.DataFrame(data)
     
+    # تنظيف البيانات
     df = df.fillna("")
-    df = df.replace({None: ""})
+    df = df.replace({None: "", pd.NaT: ""})
     df = df.astype(str)
     
-    # مسح الشيت وحفظ البيانات الجديدة
-    ws.clear()
-    ws.update([df.columns.values.tolist()] + df.values.tolist())
+    # حفظ البيانات
+    try:
+        ws.clear()
+        ws.update([df.columns.values.tolist()] + df.values.tolist())
+    except Exception as e:
+        st.error("خطأ في حفظ البيانات على Google Sheets")
+        st.code(str(e))
 
 def load_from_gsheet(base_name: str) -> list:
     try:
@@ -103,7 +111,7 @@ def load_from_gsheet(base_name: str) -> list:
         return []
 
 def save_missing_to_gsheet(data: list):
-    if not data:
+    if not data or len(data) == 0:
         ws = get_worksheet(WORKSHEET_NAMES[option] + "_مفقودة")
         ws.clear()
         ws.append_row(["لا توجد بيانات محفوظة بعد"])
@@ -111,12 +119,16 @@ def save_missing_to_gsheet(data: list):
     
     df = pd.DataFrame(data)
     df = df.fillna("")
-    df = df.replace({None: ""})
+    df = df.replace({None: "", pd.NaT: ""})
     df = df.astype(str)
     
     ws = get_worksheet(WORKSHEET_NAMES[option] + "_مفقودة")
-    ws.clear()
-    ws.update([df.columns.values.tolist()] + df.values.tolist())
+    try:
+        ws.clear()
+        ws.update([df.columns.values.tolist()] + df.values.tolist())
+    except Exception as e:
+        st.error("خطأ في حفظ القيم المفقودة")
+        st.code(str(e))
 
 def load_missing_from_gsheet() -> list:
     return load_from_gsheet(WORKSHEET_NAMES[option] + "_مفقودة")
@@ -712,6 +724,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
