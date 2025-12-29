@@ -22,23 +22,23 @@ try:
     
     SPREADSHEET_NAME = "Diwan_Legs"  # تأكد إنه بالضبط كده
     
-    st.info("جاري الاتصال بـ Google Sheets...")
+    st.info("جاري محاولة الاتصال بـ Google Sheets باسم 'Diwan_Legs'...")
     spreadsheet = client.open(SPREADSHEET_NAME)
-    st.success("✔️ تم الاتصال بـ Google Sheets بنجاح!")
+    st.success("✔️ تم الاتصال بنجاح! التطبيق شغال دلوقتي.")
     
 except gspread.exceptions.SpreadsheetNotFound:
-    st.error("❌ الملف 'Diwan_Legs' غير موجود أو الاسم غلط.")
-    st.error("تأكد من الاسم بالضبط (حساس للحروف الكبيرة والصغيرة والمسافات)")
+    st.error("❌ الملف 'Diwan_Legs' مش موجود أو الاسم غلط بالحرف.")
+    st.error("تأكد من الاسم في Google Drive بالضبط (حساس للحروف الكبيرة والـ underscore)")
     st.stop()
     
 except gspread.exceptions.APIError as e:
-    st.error("❌ خطأ في الصلاحيات أو API")
-    st.error(f"الخطأ: {e}")
+    st.error("❌ خطأ في الصلاحيات أو الـ API")
+    st.code(str(e))  # هيطبع الخطأ الحقيقي
     st.stop()
     
 except Exception as e:
-    st.error("❌ خطأ غير متوقع في الاتصال")
-    st.error(f"التفاصيل: {str(e)}")
+    st.error("❌ خطأ غير متوقع")
+    st.code(str(e))  # هيطبع التفاصيل الكاملة
     st.stop()
 
 WORKSHEET_NAMES = {
@@ -691,5 +691,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
