@@ -60,7 +60,7 @@ def authenticate(username: str, password: str) -> bool:
         if user_row.empty:
             return False
         stored_password = user_row['Password'].iloc[0]
-        return password == stored_password  # مقارنة مباشرة (الباسورد عادي في الشيت)
+        return password == stored_password  # مقارنة مباشرة
     except:
         return False
 
@@ -141,7 +141,7 @@ def save_to_gsheet(data: list, base_name: str):
     try:
         ws.clear()
         ws.update([df.columns.values.tolist()] + df.values.tolist())
-        time.sleep(2)  # تأخير 2 ثانية لتجنب rate limit
+        time.sleep(2)  # تأخير 2 ثانية
     except Exception as e:
         st.error("خطأ أثناء الحفظ على Google Sheets")
         st.code(str(e))
@@ -480,21 +480,36 @@ def render_selection_buttons(qistas_data: dict, diwan_data: dict, current_index:
         if st.button("⚠️ لا أحد منهم", use_container_width=True):
             st.session_state[form_key] = True
             st.rerun()
+
+    # فتح النموذج مع بيانات كاملة
     if st.session_state.get(SessionManager.get_unique_key('show_custom_form'), False):
-        render_custom_form(qistas_data, current_index, total_records)
+        # اختيار البيانات الأكثر اكتمالًا
+        if len(qistas_data) >= len(diwan_data):
+            base_data = qistas_data
+        else:
+            base_data = diwan_data
+        
+        # لو الاتنين فاضيين، نستخدم حقول افتراضية
+        if not base_data:
+            base_data = {
+                "LegName": "", "ByLawName": "", "Law_Name": "", "Instruction_Name": "", "Agreement_Name": "",
+                "LegNumber": "", "ByLawNumber": "", "Law_Number": "", "Instruction_Number": "", "Agreement_Number": "",
+                "Year": "", "Replaced For": "", "Replaced_For": "", "Magazine_Date": "", "ActiveDate": "", "Active_Date": "",
+                "Status": "", "Canceled By": "", "Canceled_By": "", "EndDate": "", "Replaced By": "", "Replaced_By": ""
+            }
+        
+        render_custom_form(base_data, current_index, total_records)
 
 def render_custom_form(reference_data: dict, current_index: int, total_records: int):
     st.markdown("---")
     st.markdown("<h3 style='color: white !important; text-align: center;'>✍️ عدّل البيانات الصحيحة (كل الحقول)</h3>", unsafe_allow_html=True)
     
-    # نستخدم بيانات قسطاس كأساس للتعديل (يمكن تغييره للديوان لو عايز)
     base_data = reference_data.copy()
     
     with st.form("custom_data_form_full"):
         custom_data = {}
         columns = list(base_data.keys())
         
-        # عرض كل الحقول (حتى لو مش فاضية)
         num_cols = 3
         for i in range(0, len(columns), num_cols):
             cols = st.columns(num_cols)
@@ -512,7 +527,6 @@ def render_custom_form(reference_data: dict, current_index: int, total_records: 
         col1, col2 = st.columns(2)
         with col1:
             if st.form_submit_button("حفظ والانتقال للتالي", use_container_width=True, type="primary"):
-                # تنظيف القيم الفاضية
                 cleaned_data = {k: (v.strip() if v.strip() else "") for k, v in custom_data.items()}
                 
                 save_comparison_record(cleaned_data, 'مصدر آخر (معدل يدويًا)')
