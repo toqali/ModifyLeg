@@ -141,7 +141,7 @@ def save_to_gsheet(data: list, base_name: str):
     try:
         ws.clear()
         ws.update([df.columns.values.tolist()] + df.values.tolist())
-        time.sleep(2)  # تأخير 2 ثانية
+        time.sleep(2)
     except Exception as e:
         st.error("خطأ أثناء الحفظ على Google Sheets")
         st.code(str(e))
