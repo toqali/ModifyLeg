@@ -76,15 +76,31 @@ if not st.session_state.authenticated:
         password = st.text_input("كلمة المرور", type="password", placeholder="أدخل كلمة المرور")
         submit = st.form_submit_button("دخول", use_container_width=True)
         if submit:
+            # عرض اليوزر والباسورد اللي دخلتهم للتشخيص
+            st.write(f"**اليوزر اللي دخلته:** `{username}`")
+            st.write(f"**الباسورد اللي دخلته:** `{password}`")
+
+            # جلب البيانات من الشيت وطباعتها
+            try:
+                users_ws = spreadsheet.worksheet("Users")
+                records = users_ws.get_all_records()
+                st.write("**البيانات الموجودة في الشيت Users:**")
+                if records:
+                    users_df = pd.DataFrame(records)
+                    st.dataframe(users_df)
+                else:
+                    st.write("الشيت فاضي تمامًا")
+            except Exception as e:
+                st.write(f"خطأ في قراءة الشيت: {str(e)}")
+
+            # تشغيل التحقق
             if authenticate(username, password):
                 st.session_state.authenticated = True
                 st.session_state.user_name = username
                 st.success(f"✅ مرحباً {username}! تم تسجيل الدخول بنجاح")
                 st.rerun()
             else:
-                print(username)
-                print(password)
-                st.error(f"gggggggg")
+                st.error("❌ اسم مستخدم أو كلمة مرور غير صحيحة")
     st.stop()
 
 # المستخدم مسجل دخول
