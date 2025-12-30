@@ -80,9 +80,6 @@ if not st.session_state.authenticated:
                 users_ws = spreadsheet.worksheet("Users")
                 all_values = users_ws.get_all_values()
                 if all_values:
-                    for row_num, row in enumerate(all_values, 1):
-                        st.code(f"الصف {row_num}: {row}")
-                else:
                     st.code("الشيت فاضي تمامًا!")
             except Exception as e:
                 st.code(f"خطأ في قراءة الشيت: {str(e)}")
@@ -781,6 +778,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
