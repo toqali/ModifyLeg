@@ -468,7 +468,7 @@ def render_law_comparison(qistas_df: pd.DataFrame, diwan_df: pd.DataFrame, curre
     render_selection_buttons(qistas_data, diwan_data, current_index, total_records)
     render_navigation_buttons(current_index, total_records)
 
-# ==================== التعديل الرئيسي: خيار "لا أحد منهم" ====================
+# ==================== التعديل المطلوب: دائمًا بيانات الديوان عند "لا أحد منهم" ====================
 def render_selection_buttons(qistas_data: dict, diwan_data: dict, current_index: int, total_records: int):
     st.markdown("---")
     st.markdown("<h3 style='color: white !important; text-align: center; margin-top: 2rem;'>❓ أيهما أكثر دقة؟</h3>", unsafe_allow_html=True)
@@ -493,21 +493,10 @@ def render_selection_buttons(qistas_data: dict, diwan_data: dict, current_index:
             st.session_state[form_key] = True
             st.rerun()
    
-    # النموذج يظهر فورًا تحت الأزرار إذا تم الضغط
+    # النموذج يظهر فورًا ويأخذ بيانات الديوان فقط
     if st.session_state.get(SessionManager.get_unique_key('show_custom_form'), False):
-        # اختيار السجل الأكثر اكتمالًا (الذي فيه قيم غير فارغة أكثر)
-        qis_filled = sum(1 for v in qistas_data.values() if v not in ['', None, pd.NaT])
-        diw_filled = sum(1 for v in diwan_data.values() if v not in ['', None, pd.NaT])
-        
-        base_data = qistas_data if qis_filled >= diw_filled else diwan_data
-        
-        # حالة احتياطية: إذا كان كلاهما فارغ تمامًا
-        if qis_filled == 0 and diw_filled == 0:
-            base_data = {
-                "LegName": "", "LegNumber": "", "Year": "", "Magazine_Date": "",
-                "ActiveDate": "", "Status": "", "Replaced For": "", "Canceled By": "",
-                "EndDate": "", "Replaced By": ""
-            }
+        # نأخذ بيانات الديوان مباشرة (كما طلبت)
+        base_data = diwan_data.copy()
         
         render_custom_form(base_data, current_index, total_records)
 
@@ -521,7 +510,6 @@ def render_custom_form(reference_data: dict, current_index: int, total_records: 
         custom_data = {}
         columns = list(base_data.keys())
       
-        # توزيع الحقول على 3 أعمدة لتحسين المظهر
         num_cols = 3
         for i in range(0, len(columns), num_cols):
             cols = st.columns(num_cols)
@@ -544,7 +532,6 @@ def render_custom_form(reference_data: dict, current_index: int, total_records: 
                 save_comparison_record(cleaned_data, 'مصدر آخر (معدل يدويًا)')
                 st.success("تم حفظ البيانات المعدلة يدويًا بنجاح!")
                 
-                # إغلاق النموذج والانتقال للسجل التالي
                 form_key = SessionManager.get_unique_key('show_custom_form')
                 st.session_state[form_key] = False
                 move_to_next_record(total_records, current_index)
