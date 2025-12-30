@@ -60,7 +60,7 @@ def authenticate(username: str, password: str) -> bool:
         if user_row.empty:
             return False
         stored_password = user_row['Password'].iloc[0]
-        return password == stored_password  # مقارنة مباشرة
+        return password == stored_password
     except:
         return False
 
@@ -86,11 +86,9 @@ if not st.session_state.authenticated:
                 st.error("❌ اسم مستخدم أو كلمة مرور غير صحيحة")
     st.stop()
 
-# المستخدم مسجل دخول
 user_name = st.session_state.user_name
 st.sidebar.success(f"👤 المستخدم: {user_name}")
 
-# زر تسجيل الخروج
 if st.sidebar.button("تسجيل الخروج"):
     st.session_state.authenticated = False
     st.session_state.user_name = None
@@ -127,17 +125,14 @@ def get_worksheet(base_name: str, suffix: str = ""):
 
 def save_to_gsheet(data: list, base_name: str):
     ws = get_worksheet(base_name)
-   
     if not data or len(data) == 0:
         ws.clear()
         ws.append_row(["لا توجد بيانات محفوظة بعد"])
         return
-   
     df = pd.DataFrame(data)
     df = df.fillna("")
     df = df.replace({None: "", pd.NaT: ""})
     df = df.astype(str)
-   
     try:
         ws.clear()
         ws.update([df.columns.values.tolist()] + df.values.tolist())
@@ -160,12 +155,10 @@ def save_missing_to_gsheet(data: list):
         ws.clear()
         ws.append_row(["لا توجد بيانات محفوظة بعد"])
         return
-   
     df = pd.DataFrame(data)
     df = df.fillna("")
     df = df.replace({None: "", pd.NaT: ""})
     df = df.astype(str)
-   
     ws = get_worksheet(WORKSHEET_NAMES[option] + "_مفقودة")
     try:
         ws.clear()
@@ -225,7 +218,6 @@ class SessionManager:
         comp_key = SessionManager.get_unique_key("comparison_data")
         idx_key = SessionManager.get_unique_key("current_index")
         max_key = SessionManager.get_unique_key("max_reached_idx")
-        form_key = SessionManager.get_unique_key("show_custom_form")
         next_key = SessionManager.get_unique_key("show_next_in_review")
         malq_key = SessionManager.get_unique_key("malq_completed")
         
@@ -238,7 +230,9 @@ class SessionManager:
         st.session_state[idx_key] = current_idx
         st.session_state[max_key] = max_reached
         st.session_state[next_key] = False
-        st.session_state[form_key] = False
+        
+        # مفتاح ثابت للنموذج المخصص (الحل النهائي للمشكلة)
+        st.session_state.show_custom_form = False
         
         save_progress(current_idx, max_reached)
     
@@ -275,7 +269,8 @@ def move_to_next_record(total_records: int, current_index: int) -> None:
         new_max = max(st.session_state.get(max_key, 0), new_index)
         st.session_state[max_key] = new_max
         st.session_state[next_key] = False
-       
+        st.session_state.show_custom_form = False  # إغلاق النموذج تلقائيًا
+        
         save_progress(new_index, new_max)
         save_persistent_data()
         st.rerun()
@@ -309,10 +304,8 @@ def load_csv_data(kind: str):
             return None
     qis_df = read_excel_safely(PATHS[kind]['qis'], "قسطاس")
     diwan_df = read_excel_safely(PATHS[kind]['diwan'], "الديوان")
-   
     if qis_df is None or diwan_df is None:
         st.stop()
-   
     return qis_df, diwan_df
 
 # ==================== التنسيقات ====================
@@ -468,7 +461,7 @@ def render_law_comparison(qistas_df: pd.DataFrame, diwan_df: pd.DataFrame, curre
     render_selection_buttons(qistas_data, diwan_data, current_index, total_records)
     render_navigation_buttons(current_index, total_records)
 
-# ==================== التعديل المطلوب: دائمًا بيانات الديوان عند "لا أحد منهم" ====================
+# ==================== خيار "لا أحد منهم" مع نموذج من الديوان فقط ====================
 def render_selection_buttons(qistas_data: dict, diwan_data: dict, current_index: int, total_records: int):
     st.markdown("---")
     st.markdown("<h3 style='color: white !important; text-align: center; margin-top: 2rem;'>❓ أيهما أكثر دقة؟</h3>", unsafe_allow_html=True)
@@ -476,39 +469,34 @@ def render_selection_buttons(qistas_data: dict, diwan_data: dict, current_index:
     col1, col2, col3 = st.columns(3)
   
     with col1:
-        if st.button("✅ قسطاس صحيح", use_container_width=True):
+        if st.button("✅ قسطاس صحيح", use_container_width=True, key=f"qis_{current_index}"):
             save_comparison_record(qistas_data, 'قسطاس')
             st.success("تم حفظ النتيجة من قسطاس!")
             move_to_next_record(total_records, current_index)
   
     with col2:
-        if st.button("✅ الديوان صحيح", use_container_width=True):
+        if st.button("✅ الديوان صحيح", use_container_width=True, key=f"diw_{current_index}"):
             save_comparison_record(diwan_data, 'الديوان')
             st.success("تم حفظ النتيجة من الديوان!")
             move_to_next_record(total_records, current_index)
   
     with col3:
-        form_key = SessionManager.get_unique_key('show_custom_form')
-        if st.button("⚠️ لا أحد منهم", use_container_width=True):
-            st.session_state[form_key] = True
+        if st.button("⚠️ لا أحد منهم", use_container_width=True, key=f"none_{current_index}"):
+            st.session_state.show_custom_form = True
             st.rerun()
    
-    # النموذج يظهر فورًا ويأخذ بيانات الديوان فقط
-    if st.session_state.get(SessionManager.get_unique_key('show_custom_form'), False):
-        # نأخذ بيانات الديوان مباشرة (كما طلبت)
+    # النموذج يظهر فورًا مع بيانات الديوان فقط
+    if st.session_state.get("show_custom_form", False):
         base_data = diwan_data.copy()
-        
         render_custom_form(base_data, current_index, total_records)
 
 def render_custom_form(reference_data: dict, current_index: int, total_records: int):
     st.markdown("---")
-    st.markdown("<h3 style='color: white !important; text-align: center;'>✍️ عدّل البيانات الصحيحة يدويًا (كل الحقول)</h3>", unsafe_allow_html=True)
-  
-    base_data = reference_data.copy()
+    st.markdown("<h3 style='color: white !important; text-align: center;'>✍️ عدّل البيانات الصحيحة يدويًا (من الديوان)</h3>", unsafe_allow_html=True)
   
     with st.form("custom_data_form_full"):
         custom_data = {}
-        columns = list(base_data.keys())
+        columns = list(reference_data.keys())
       
         num_cols = 3
         for i in range(0, len(columns), num_cols):
@@ -516,7 +504,7 @@ def render_custom_form(reference_data: dict, current_index: int, total_records: 
             for j, col in enumerate(cols):
                 if i + j < len(columns):
                     field_name = columns[i + j]
-                    default_value = base_data.get(field_name, "")
+                    default_value = reference_data.get(field_name, "")
                     value_str = str(default_value) if default_value not in [None, "", pd.NaT] else ""
                     custom_data[field_name] = col.text_input(
                         field_name,
@@ -527,26 +515,21 @@ def render_custom_form(reference_data: dict, current_index: int, total_records: 
         col1, col2 = st.columns(2)
         with col1:
             if st.form_submit_button("حفظ والانتقال للتالي", use_container_width=True, type="primary"):
-                cleaned_data = {k: (v.strip() if v.strip() else "") for k, v in custom_data.items()}
-              
-                save_comparison_record(cleaned_data, 'مصدر آخر (معدل يدويًا)')
-                st.success("تم حفظ البيانات المعدلة يدويًا بنجاح!")
-                
-                form_key = SessionManager.get_unique_key('show_custom_form')
-                st.session_state[form_key] = False
+                cleaned_data = {k: v.strip() if isinstance(v, str) else "" for k, v in custom_data.items()}
+                save_comparison_record(cleaned_data, 'معدل يدويًا (من الديوان)')
+                st.success("تم حفظ البيانات المعدلة بنجاح!")
+                st.session_state.show_custom_form = False
                 move_to_next_record(total_records, current_index)
       
         with col2:
             if st.form_submit_button("إلغاء", use_container_width=True):
-                form_key = SessionManager.get_unique_key('show_custom_form')
-                st.session_state[form_key] = False
+                st.session_state.show_custom_form = False
                 st.rerun()
 
 def render_navigation_buttons(current_index: int, total_records: int):
     st.markdown("---")
     col1, col2, col3 = st.columns([1, 2, 1])
     idx_key = SessionManager.get_unique_key('current_index')
-    form_key = SessionManager.get_unique_key('show_custom_form')
     next_key = SessionManager.get_unique_key('show_next_in_review')
     max_key = SessionManager.get_unique_key('max_reached_idx')
    
@@ -555,7 +538,7 @@ def render_navigation_buttons(current_index: int, total_records: int):
             if st.button("⏮️ السابق", use_container_width=True):
                 new_idx = current_index - 1
                 st.session_state[idx_key] = new_idx
-                st.session_state[form_key] = False
+                st.session_state.show_custom_form = False
                 st.session_state[next_key] = True
                 save_progress(new_idx, st.session_state[max_key])
                 save_persistent_data()
@@ -596,14 +579,13 @@ def render_comparison_tab(qistas_df: pd.DataFrame, diwan_df: pd.DataFrame):
         st.success("تم الانتهاء من مراجعة جميع السجلات!")
         if st.button("البدء من جديد"):
             st.session_state[idx_key] = 0
-            st.session_state[SessionManager.get_unique_key('show_custom_form')] = False
+            st.session_state.show_custom_form = False
             save_progress(0, 0)
             save_persistent_data()
             st.rerun()
   
     st.markdown("</div>", unsafe_allow_html=True)
 
-# ==================== عرض البيانات المحفوظة ====================
 def render_saved_data_tab():
     st.markdown("<h2 style='text-align: center; color: #667eea;'>📁 البيانات المحفوظة والمقارنات المنجزة</h2>", unsafe_allow_html=True)
    
@@ -631,7 +613,6 @@ def render_saved_data_tab():
         mime="text/csv"
     )
 
-# ==================== عرض القيم المفقودة ====================
 def render_missing_malq_tab():
     st.markdown("<h2 style='text-align: center; color: #667eea;'>⚠️ القيم المفقودة أو غير المتطابقة</h2>", unsafe_allow_html=True)
    
