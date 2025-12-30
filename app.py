@@ -76,28 +76,27 @@ if not st.session_state.authenticated:
         password = st.text_input("كلمة المرور", type="password", placeholder="أدخل كلمة المرور")
         submit = st.form_submit_button("دخول", use_container_width=True)
         if submit:
-            st.markdown("### 🔍 تشخيص الدخول (للتصليح فقط):")
-            st.code(f"اليوزر اللي دخلته: '{username}' (طول: {len(username)})")
-            st.code(f"الباسورد اللي دخلته: '{password}' (طول: {len(password)})")
+            # طباعة اللي دخلته
+            st.markdown("### اليوزر اللي كتبته:")
+            st.code(username)
+            st.markdown("### الباسورد اللي كتبته:")
+            st.code(password)
 
+            # طباعة كل البيانات الخام من الشيت
+            st.markdown("### البيانات الخام من الشيت 'Users' (كل خلية بالضبط):")
             try:
                 users_ws = spreadsheet.worksheet("Users")
                 all_values = users_ws.get_all_values()
-                st.markdown("### البيانات الكاملة في الشيت 'Users' (صفوف + أعمدة):")
                 if all_values:
-                    st.dataframe(pd.DataFrame(all_values[1:], columns=all_values[0]))
-                    st.write("العناوين (الصف الأول):", all_values[0])
-                    st.write("كل الصفوف الخام:", all_values)
+                    for row_num, row in enumerate(all_values, 1):
+                        st.code(f"الصف {row_num}: {row}")
                 else:
-                    st.write("الشيت فاضي تمامًا!")
+                    st.code("الشيت فاضي تمامًا!")
             except Exception as e:
-                st.error(f"خطأ في قراءة الشيت Users: {str(e)}")
+                st.code(f"خطأ في قراءة الشيت: {str(e)}")
 
-            # التحقق النهائي
-            is_correct = authenticate(username, password)
-            st.markdown(f"### نتيجة التحقق: {'✅ صحيح' if is_correct else '❌ غلط'}")
-
-            if is_correct:
+            # التحقق
+            if authenticate(username, password):
                 st.session_state.authenticated = True
                 st.session_state.user_name = username
                 st.success(f"✅ مرحباً {username}! دخلت بنجاح")
@@ -790,6 +789,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
