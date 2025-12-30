@@ -3,7 +3,6 @@
 مع تسجيل دخول (يوزر + باسورد) + حفظ دائم للنتائج والتقدم لكل مستخدم
 جاهز للعمل 100% - ديسمبر 2025
 """
-
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -128,6 +127,7 @@ def get_worksheet(base_name: str, suffix: str = ""):
 
 def save_to_gsheet(data: list, base_name: str):
     ws = get_worksheet(base_name)
+   
     if not data or len(data) == 0:
         ws.clear()
         ws.append_row(["لا توجد بيانات محفوظة بعد"])
@@ -296,7 +296,6 @@ def load_csv_data(kind: str):
     if kind not in PATHS:
         st.error(f"النوع '{kind}' غير مدعوم.")
         return None, None
-
     def read_excel_safely(path, name):
         if not os.path.exists(path):
             st.error(f"الملف غير موجود: {path}")
@@ -308,13 +307,12 @@ def load_csv_data(kind: str):
         except Exception as e:
             st.error(f"خطأ في تحميل {name}: {e}")
             return None
-
     qis_df = read_excel_safely(PATHS[kind]['qis'], "قسطاس")
     diwan_df = read_excel_safely(PATHS[kind]['diwan'], "الديوان")
-    
+   
     if qis_df is None or diwan_df is None:
         st.stop()
-    
+   
     return qis_df, diwan_df
 
 # ==================== التنسيقات ====================
@@ -407,10 +405,10 @@ def render_wizard_steps(current_index: int, total_records: int):
 def render_law_comparison(qistas_df: pd.DataFrame, diwan_df: pd.DataFrame, current_index: int, total_records: int):
     qistas_data = get_legislation_data(current_index, qistas_df)
     diwan_data = get_legislation_data(current_index, diwan_df)
-    
+   
     st.markdown("<h3 style='color: #667eea !important; text-align: center;'>المقارنة التفصيلية</h3>", unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
-    
+   
     FIELD_MAPPING = {
         "نظام": {"name_qis": "LegName", "name_diw": "ByLawName", "num_qis": "LegNumber", "num_diw": "ByLawNumber"},
         "قانون": {"name_qis": "LegName", "name_diw": "Law_Name", "num_qis": "LegNumber", "num_diw": "Law_Number"},
@@ -418,7 +416,7 @@ def render_law_comparison(qistas_df: pd.DataFrame, diwan_df: pd.DataFrame, curre
         "اتفاقيات": {"name_qis": "LegName", "name_diw": "Agreement_Name", "num_qis": "LegNumber", "num_diw": "Agreement_Number"},
     }
     mapping = FIELD_MAPPING.get(option, FIELD_MAPPING["نظام"])
-    
+   
     DISPLAY_FIELDS = [
         ("اسم التشريع", mapping["name_qis"], mapping["name_diw"]),
         ("رقم التشريع", mapping["num_qis"], mapping["num_diw"]),
@@ -428,16 +426,16 @@ def render_law_comparison(qistas_df: pd.DataFrame, diwan_df: pd.DataFrame, curre
         ("تاريخ السريان", "ActiveDate", "Active_Date"),
         ("الحالة", "Status", "Status"),
     ]
-    
+   
     CONDITIONAL_FIELDS = [
         ("ألغي بواسطة", "Canceled By", "Canceled_By"),
         ("تاريخ الانتهاء", "EndDate", "EndDate"),
         ("تم استبداله بواسطة", "Replaced By", "Replaced_By"),
     ]
-    
+   
     status_q_int = parse_status(qistas_data.get('Status'))
     rows = []
-    
+   
     for label, q_key, d_key in DISPLAY_FIELDS:
         qv = qistas_data.get(q_key, '')
         dv = diwan_data.get(d_key, '')
@@ -445,7 +443,7 @@ def render_law_comparison(qistas_df: pd.DataFrame, diwan_df: pd.DataFrame, curre
         d_str = '—' if pd.isna(dv) or str(dv).strip() == '' else str(dv)
         diff_class = 'cmp-diff' if q_str != '—' and d_str != '—' and q_str != d_str else ''
         rows.append((label, q_str, d_str, diff_class))
-    
+   
     if status_q_int == 2:
         for label, q_key, d_key in CONDITIONAL_FIELDS:
             qv = qistas_data.get(q_key, '')
@@ -456,7 +454,7 @@ def render_law_comparison(qistas_df: pd.DataFrame, diwan_df: pd.DataFrame, curre
                 continue
             diff_class = 'cmp-diff' if q_str != '—' and d_str != '—' and q_str != d_str else ''
             rows.append((label, q_str, d_str, diff_class))
-    
+   
     if rows:
         html = ["<div class='cmp-wrapper'><table class='cmp-table'>"]
         html.append("<thead><tr><th>اسم الحقل</th><th>قسطاس</th><th>الديوان</th></tr></thead><tbody>")
@@ -466,60 +464,64 @@ def render_law_comparison(qistas_df: pd.DataFrame, diwan_df: pd.DataFrame, curre
         st.markdown("\n".join(html), unsafe_allow_html=True)
     else:
         st.info("لا توجد بيانات للمقارنة في هذا السجل.")
-    
+   
     render_selection_buttons(qistas_data, diwan_data, current_index, total_records)
     render_navigation_buttons(current_index, total_records)
 
+# ==================== التعديل الرئيسي: خيار "لا أحد منهم" ====================
 def render_selection_buttons(qistas_data: dict, diwan_data: dict, current_index: int, total_records: int):
     st.markdown("---")
     st.markdown("<h3 style='color: white !important; text-align: center; margin-top: 2rem;'>❓ أيهما أكثر دقة؟</h3>", unsafe_allow_html=True)
-   
+  
     col1, col2, col3 = st.columns(3)
-   
+  
     with col1:
         if st.button("✅ قسطاس صحيح", use_container_width=True):
             save_comparison_record(qistas_data, 'قسطاس')
             st.success("تم حفظ النتيجة من قسطاس!")
             move_to_next_record(total_records, current_index)
-   
+  
     with col2:
         if st.button("✅ الديوان صحيح", use_container_width=True):
             save_comparison_record(diwan_data, 'الديوان')
             st.success("تم حفظ النتيجة من الديوان!")
             move_to_next_record(total_records, current_index)
-   
+  
     with col3:
         form_key = SessionManager.get_unique_key('show_custom_form')
         if st.button("⚠️ لا أحد منهم", use_container_width=True):
             st.session_state[form_key] = True
             st.rerun()
-    
+   
+    # النموذج يظهر فورًا تحت الأزرار إذا تم الضغط
     if st.session_state.get(SessionManager.get_unique_key('show_custom_form'), False):
-        if len(qistas_data) >= len(diwan_data):
-            base_data = qistas_data
-        else:
-            base_data = diwan_data
-       
-        if not base_data:
+        # اختيار السجل الأكثر اكتمالًا (الذي فيه قيم غير فارغة أكثر)
+        qis_filled = sum(1 for v in qistas_data.values() if v not in ['', None, pd.NaT])
+        diw_filled = sum(1 for v in diwan_data.values() if v not in ['', None, pd.NaT])
+        
+        base_data = qistas_data if qis_filled >= diw_filled else diwan_data
+        
+        # حالة احتياطية: إذا كان كلاهما فارغ تمامًا
+        if qis_filled == 0 and diw_filled == 0:
             base_data = {
-                "LegName": "", "ByLawName": "", "Law_Name": "", "Instruction_Name": "", "Agreement_Name": "",
-                "LegNumber": "", "ByLawNumber": "", "Law_Number": "", "Instruction_Number": "", "Agreement_Number": "",
-                "Year": "", "Replaced For": "", "Replaced_For": "", "Magazine_Date": "", "ActiveDate": "", "Active_Date": "",
-                "Status": "", "Canceled By": "", "Canceled_By": "", "EndDate": "", "Replaced By": "", "Replaced_By": ""
+                "LegName": "", "LegNumber": "", "Year": "", "Magazine_Date": "",
+                "ActiveDate": "", "Status": "", "Replaced For": "", "Canceled By": "",
+                "EndDate": "", "Replaced By": ""
             }
-       
+        
         render_custom_form(base_data, current_index, total_records)
 
 def render_custom_form(reference_data: dict, current_index: int, total_records: int):
     st.markdown("---")
-    st.markdown("<h3 style='color: white !important; text-align: center;'>✍️ عدّل البيانات الصحيحة (كل الحقول)</h3>", unsafe_allow_html=True)
-   
+    st.markdown("<h3 style='color: white !important; text-align: center;'>✍️ عدّل البيانات الصحيحة يدويًا (كل الحقول)</h3>", unsafe_allow_html=True)
+  
     base_data = reference_data.copy()
-   
+  
     with st.form("custom_data_form_full"):
         custom_data = {}
         columns = list(base_data.keys())
-       
+      
+        # توزيع الحقول على 3 أعمدة لتحسين المظهر
         num_cols = 3
         for i in range(0, len(columns), num_cols):
             cols = st.columns(num_cols)
@@ -533,16 +535,20 @@ def render_custom_form(reference_data: dict, current_index: int, total_records: 
                         value=value_str,
                         key=f"custom_{field_name}_{current_index}"
                     )
-       
+      
         col1, col2 = st.columns(2)
         with col1:
             if st.form_submit_button("حفظ والانتقال للتالي", use_container_width=True, type="primary"):
                 cleaned_data = {k: (v.strip() if v.strip() else "") for k, v in custom_data.items()}
-               
+              
                 save_comparison_record(cleaned_data, 'مصدر آخر (معدل يدويًا)')
                 st.success("تم حفظ البيانات المعدلة يدويًا بنجاح!")
+                
+                # إغلاق النموذج والانتقال للسجل التالي
+                form_key = SessionManager.get_unique_key('show_custom_form')
+                st.session_state[form_key] = False
                 move_to_next_record(total_records, current_index)
-       
+      
         with col2:
             if st.form_submit_button("إلغاء", use_container_width=True):
                 form_key = SessionManager.get_unique_key('show_custom_form')
@@ -556,7 +562,7 @@ def render_navigation_buttons(current_index: int, total_records: int):
     form_key = SessionManager.get_unique_key('show_custom_form')
     next_key = SessionManager.get_unique_key('show_next_in_review')
     max_key = SessionManager.get_unique_key('max_reached_idx')
-    
+   
     with col1:
         if current_index > 0:
             if st.button("⏮️ السابق", use_container_width=True):
@@ -567,7 +573,7 @@ def render_navigation_buttons(current_index: int, total_records: int):
                 save_progress(new_idx, st.session_state[max_key])
                 save_persistent_data()
                 st.rerun()
-  
+ 
     with col3:
         max_reached = st.session_state.get(max_key, 0)
         show_next = st.session_state.get(next_key, False)
@@ -583,20 +589,20 @@ def render_navigation_buttons(current_index: int, total_records: int):
 
 def render_comparison_tab(qistas_df: pd.DataFrame, diwan_df: pd.DataFrame):
     st.markdown("<div class='comparison-card'>", unsafe_allow_html=True)
-   
+  
     total_records = min(len(qistas_df), len(diwan_df))
     idx_key = SessionManager.get_unique_key('current_index')
     current_index = st.session_state[idx_key]
-   
+  
     progress_percentage = int(((current_index + 1) / total_records) * 100) if total_records > 0 else 0
-   
+  
     st.markdown(f"<div class='wizard-container'><h3 style='color: #667eea; text-align: center;'>مقارنة التشريعات</h3><p style='text-align: center;'>{current_index + 1} من {total_records} ({progress_percentage}%)</p></div>", unsafe_allow_html=True)
-   
+  
     if total_records > 0:
         render_wizard_steps(current_index, total_records)
-   
+  
     st.markdown(f"<div style='background: #e2e8f0; height: 15px; border-radius: 10px; overflow: hidden; margin: 1.5rem 0 2rem 0;'><div style='height: 100%; background: linear-gradient(90deg, #667eea 0%, #48bb78 100%); width: {progress_percentage}%;'></div></div>", unsafe_allow_html=True)
-   
+  
     if current_index < total_records:
         render_law_comparison(qistas_df, diwan_df, current_index, total_records)
     else:
@@ -607,29 +613,29 @@ def render_comparison_tab(qistas_df: pd.DataFrame, diwan_df: pd.DataFrame):
             save_progress(0, 0)
             save_persistent_data()
             st.rerun()
-   
+  
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ==================== عرض البيانات المحفوظة ====================
 def render_saved_data_tab():
     st.markdown("<h2 style='text-align: center; color: #667eea;'>📁 البيانات المحفوظة والمقارنات المنجزة</h2>", unsafe_allow_html=True)
-    
+   
     comp_key = SessionManager.get_unique_key("comparison_data")
     saved_data = st.session_state.get(comp_key, [])
-    
+   
     if not saved_data:
         st.info("لم يتم حفظ أي بيانات مقارنة بعد.")
         return
-    
+   
     df = pd.DataFrame(saved_data)
     df = df.fillna("")
-    
+   
     if 'تاريخ الإدخال' in df.columns:
         df['تاريخ الإدخال'] = pd.to_datetime(df['تاريخ الإدخال'], errors='coerce')
         df = df.sort_values('تاريخ الإدخال', ascending=False)
-    
+   
     st.dataframe(df, use_container_width=True, hide_index=True)
-    
+   
     csv = df.to_csv(index=False).encode('utf-8-sig')
     st.download_button(
         label="📥 تحميل البيانات كـ CSV",
@@ -641,19 +647,19 @@ def render_saved_data_tab():
 # ==================== عرض القيم المفقودة ====================
 def render_missing_malq_tab():
     st.markdown("<h2 style='text-align: center; color: #667eea;'>⚠️ القيم المفقودة أو غير المتطابقة</h2>", unsafe_allow_html=True)
-    
+   
     malq_key = SessionManager.get_unique_key("malq_completed")
     missing_data = st.session_state.get(malq_key, [])
-    
+   
     if not missing_data:
         st.info("لا توجد قيم مفقودة محفوظة حاليًا.")
         return
-    
+   
     df = pd.DataFrame(missing_data)
     df = df.fillna("")
-    
+   
     st.dataframe(df, use_container_width=True, hide_index=True)
-    
+   
     csv = df.to_csv(index=False).encode('utf-8-sig')
     st.download_button(
         label="📥 تحميل القيم المفقودة كـ CSV",
@@ -673,12 +679,12 @@ def main():
             </p>
         </div>
     """, unsafe_allow_html=True)
-    
+   
     initialize_session_state()
     qis_df, diw_df = load_csv_data(option)
-    
+   
     tab1, tab2, tab3 = st.tabs(["🔍 مقارنة تفصيلية", "📁 البيانات المحفوظة", "⚠️ قيم مفقودة"])
-    
+   
     with tab1:
         render_comparison_tab(qis_df, diw_df)
     with tab2:
