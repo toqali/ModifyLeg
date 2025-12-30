@@ -76,35 +76,34 @@ if not st.session_state.authenticated:
         password = st.text_input("كلمة المرور", type="password", placeholder="أدخل كلمة المرور")
         submit = st.form_submit_button("دخول", use_container_width=True)
         if submit:
-                # طباعة اللي دخلته للتشخيص
-                st.markdown("### 🔍 معلومات الدخول اللي كتبتها:")
-                st.code(f"Username: '{username}' (length: {len(username)})")
-                st.code(f"Password: '{password}' (length: {len(password)})")
+            st.markdown("### 🔍 تشخيص الدخول (للتصليح فقط):")
+            st.code(f"اليوزر اللي دخلته: '{username}' (طول: {len(username)})")
+            st.code(f"الباسورد اللي دخلته: '{password}' (طول: {len(password)})")
 
-                # طباعة البيانات من الشيت Users
-                st.markdown("### 📋 البيانات الموجودة في شيت 'Users':")
-                try:
-                    users_ws = spreadsheet.worksheet("Users")
-                    all_values = users_ws.get_all_values()  # جلب كل القيم حتى العناوين
-                    if all_values:
-                        st.dataframe(pd.DataFrame(all_values[1:], columns=all_values[0]))
-                        st.write("العناوين (الصف الأول):", all_values[0])
-                    else:
-                        st.write("الشيت فاضي تمامًا!")
-                except Exception as e:
-                    st.error(f"خطأ في قراءة الشيت: {str(e)}")
-
-                # تشغيل التحقق وطباعة النتيجة
-                is_auth = authenticate(username, password)
-                st.markdown(f"### نتيجة التحقق: {'✅ صحيح' if is_auth else '❌ غلط'}")
-
-                if is_auth:
-                    st.session_state.authenticated = True
-                    st.session_state.user_name = username
-                    st.success(f"✅ مرحباً {username}! تم تسجيل الدخول بنجاح")
-                    st.rerun()
+            try:
+                users_ws = spreadsheet.worksheet("Users")
+                all_values = users_ws.get_all_values()
+                st.markdown("### البيانات الكاملة في الشيت 'Users' (صفوف + أعمدة):")
+                if all_values:
+                    st.dataframe(pd.DataFrame(all_values[1:], columns=all_values[0]))
+                    st.write("العناوين (الصف الأول):", all_values[0])
+                    st.write("كل الصفوف الخام:", all_values)
                 else:
-                    st.error("❌ اسم مستخدم أو كلمة مرور غير صحيحة")
+                    st.write("الشيت فاضي تمامًا!")
+            except Exception as e:
+                st.error(f"خطأ في قراءة الشيت Users: {str(e)}")
+
+            # التحقق النهائي
+            is_correct = authenticate(username, password)
+            st.markdown(f"### نتيجة التحقق: {'✅ صحيح' if is_correct else '❌ غلط'}")
+
+            if is_correct:
+                st.session_state.authenticated = True
+                st.session_state.user_name = username
+                st.success(f"✅ مرحباً {username}! دخلت بنجاح")
+                st.rerun()
+            else:
+                st.error("❌ اسم مستخدم أو كلمة مرور غير صحيحة")
     st.stop()
 
 # المستخدم مسجل دخول
@@ -791,6 +790,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
