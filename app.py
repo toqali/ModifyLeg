@@ -102,7 +102,7 @@ if not st.session_state.authenticated:
                 st.success(f"✅ مرحباً {username}! دخلت بنجاح")
                 st.rerun()
             else:
-                st.error("❌ اسم مستخدم أو كلمة مرور غير صحيحة")
+                st.error("❌ صحححححححححححها اسم مستخدم أو كلمة مرور غير صحيحة")
     st.stop()
 
 # المستخدم مسجل دخول
@@ -789,6 +789,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
