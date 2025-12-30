@@ -76,31 +76,35 @@ if not st.session_state.authenticated:
         password = st.text_input("كلمة المرور", type="password", placeholder="أدخل كلمة المرور")
         submit = st.form_submit_button("دخول", use_container_width=True)
         if submit:
-            # عرض اليوزر والباسورد اللي دخلتهم للتشخيص
-            st.write(f"**اليوزر اللي دخلته:** `{username}`")
-            st.write(f"**الباسورد اللي دخلته:** `{password}`")
+                # طباعة اللي دخلته للتشخيص
+                st.markdown("### 🔍 معلومات الدخول اللي كتبتها:")
+                st.code(f"Username: '{username}' (length: {len(username)})")
+                st.code(f"Password: '{password}' (length: {len(password)})")
 
-            # جلب البيانات من الشيت وطباعتها
-            try:
-                users_ws = spreadsheet.worksheet("Users")
-                records = users_ws.get_all_records()
-                st.write("**البيانات الموجودة في الشيت Users:**")
-                if records:
-                    users_df = pd.DataFrame(records)
-                    st.dataframe(users_df)
+                # طباعة البيانات من الشيت Users
+                st.markdown("### 📋 البيانات الموجودة في شيت 'Users':")
+                try:
+                    users_ws = spreadsheet.worksheet("Users")
+                    all_values = users_ws.get_all_values()  # جلب كل القيم حتى العناوين
+                    if all_values:
+                        st.dataframe(pd.DataFrame(all_values[1:], columns=all_values[0]))
+                        st.write("العناوين (الصف الأول):", all_values[0])
+                    else:
+                        st.write("الشيت فاضي تمامًا!")
+                except Exception as e:
+                    st.error(f"خطأ في قراءة الشيت: {str(e)}")
+
+                # تشغيل التحقق وطباعة النتيجة
+                is_auth = authenticate(username, password)
+                st.markdown(f"### نتيجة التحقق: {'✅ صحيح' if is_auth else '❌ غلط'}")
+
+                if is_auth:
+                    st.session_state.authenticated = True
+                    st.session_state.user_name = username
+                    st.success(f"✅ مرحباً {username}! تم تسجيل الدخول بنجاح")
+                    st.rerun()
                 else:
-                    st.write("الشيت فاضي تمامًا")
-            except Exception as e:
-                st.write(f"خطأ في قراءة الشيت: {str(e)}")
-
-            # تشغيل التحقق
-            if authenticate(username, password):
-                st.session_state.authenticated = True
-                st.session_state.user_name = username
-                st.success(f"✅ مرحباً {username}! تم تسجيل الدخول بنجاح")
-                st.rerun()
-            else:
-                st.error("❌ اسم مستخدم أو كلمة مرور غير صحيحة")
+                    st.error("❌ اسم مستخدم أو كلمة مرور غير صحيحة")
     st.stop()
 
 # المستخدم مسجل دخول
@@ -787,6 +791,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
