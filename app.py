@@ -23,9 +23,8 @@ try:
    
     SPREADSHEET_NAME = "Diwan_Legs"  # اسم الملف بالضبط في Google Drive
    
-    st.info("جاري محاولة الاتصال بـ Google Sheets باسم 'Diwan_Legs'...")
     spreadsheet = client.open(SPREADSHEET_NAME)
-    st.success("✔️ تم الاتصال بنجاح! التطبيق شغال دلوقتي.")
+    st.success("✔️ تم الاتصال بنجاح! .")
    
 except gspread.exceptions.SpreadsheetNotFound:
     st.error("❌ الملف 'Diwan_Legs' مش موجود أو الاسم غلط بالحرف.")
@@ -79,12 +78,9 @@ if not st.session_state.authenticated:
             try:
                 users_ws = spreadsheet.worksheet("Users")
                 all_values = users_ws.get_all_values()
-                if all_values:
-                    st.code("الشيت فاضي تمامًا!")
             except Exception as e:
                 st.code(f"خطأ في قراءة الشيت: {str(e)}")
 
-            # التحقق
             if authenticate(username, password):
                 st.session_state.authenticated = True
                 st.session_state.user_name = username
@@ -780,6 +776,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
