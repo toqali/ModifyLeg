@@ -11,6 +11,7 @@ import os
 import gspread
 from google.oauth2.service_account import Credentials
 import hashlib
+import time  # للتأخير ضد rate limit
 
 # ==================== ربط Google Sheets ====================
 try:
@@ -21,10 +22,11 @@ try:
     creds = Credentials.from_service_account_info(st.secrets["google"], scopes=scopes)
     client = gspread.authorize(creds)
    
-    SPREADSHEET_NAME = "Diwan_Legs"  # اسم الملف بالضبط في Google Drive
+    SPREADSHEET_NAME = "Diwan_Legs"
    
+    st.info("جاري محاولة الاتصال بـ Google Sheets باسم 'Diwan_Legs'...")
     spreadsheet = client.open(SPREADSHEET_NAME)
-    st.success("✔️ تم الاتصال بنجاح! .")
+    st.success("✔️ تم الاتصال بنجاح! التطبيق شغال دلوقتي.")
    
 except gspread.exceptions.SpreadsheetNotFound:
     st.error("❌ الملف 'Diwan_Legs' مش موجود أو الاسم غلط بالحرف.")
@@ -58,7 +60,7 @@ def authenticate(username: str, password: str) -> bool:
         if user_row.empty:
             return False
         stored_password = user_row['Password'].iloc[0]
-        return password == stored_password  # مقارنة مباشرة بدون hash
+        return password == stored_password  # مقارنة مباشرة (الباسورد عادي في الشيت)
     except:
         return False
 
@@ -71,23 +73,17 @@ if not st.session_state.authenticated:
     st.markdown("<h1 style='text-align: center; color: #667eea;'>🔐 تسجيل الدخول إلى النظام</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center;'>أدخل اسم المستخدم وكلمة المرور للمتابعة</p>", unsafe_allow_html=True)
     with st.form("login_form", clear_on_submit=False):
-        username = st.text_input("اسم المستخدم", placeholder="مثال: admin")
+        username = st.text_input("اسم المستخدم", placeholder="مثال: diwan")
         password = st.text_input("كلمة المرور", type="password", placeholder="أدخل كلمة المرور")
         submit = st.form_submit_button("دخول", use_container_width=True)
         if submit:
-            try:
-                users_ws = spreadsheet.worksheet("Users")
-                all_values = users_ws.get_all_values()
-            except Exception as e:
-                st.code(f"خطأ في قراءة الشيت: {str(e)}")
-
             if authenticate(username, password):
                 st.session_state.authenticated = True
                 st.session_state.user_name = username
-                st.success(f"✅ مرحباً {username}! دخلت بنجاح")
+                st.success(f"✅ مرحباً {username}! تم تسجيل الدخول بنجاح")
                 st.rerun()
             else:
-                st.error("❌  اسم مستخدم أو كلمة مرور غير صحيحة")
+                st.error("❌ اسم مستخدم أو كلمة مرور غير صحيحة")
     st.stop()
 
 # المستخدم مسجل دخول
@@ -145,7 +141,7 @@ def save_to_gsheet(data: list, base_name: str):
     try:
         ws.clear()
         ws.update([df.columns.values.tolist()] + df.values.tolist())
-        time.sleep(2)   
+        time.sleep(2)  # تأخير 2 ثانية لتجنب rate limit
     except Exception as e:
         st.error("خطأ أثناء الحفظ على Google Sheets")
         st.code(str(e))
@@ -174,6 +170,7 @@ def save_missing_to_gsheet(data: list):
     try:
         ws.clear()
         ws.update([df.columns.values.tolist()] + df.values.tolist())
+        time.sleep(2)
     except Exception as e:
         st.error("خطأ أثناء حفظ القيم المفقودة")
         st.code(str(e))
@@ -198,7 +195,7 @@ def save_progress(current_idx: int, max_reached: int):
         ws.clear()
         ws.append_row(["current_index", "max_reached_idx", "last_updated"])
         ws.append_row([str(current_idx), str(max_reached), datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
-        time.sleep(2) 
+        time.sleep(2)
     except Exception as e:
         st.warning("خطأ في حفظ التقدم (بس البيانات محفوظة)")
 
@@ -238,14 +235,12 @@ class SessionManager:
         if malq_key not in st.session_state:
             st.session_state[malq_key] = load_missing_from_gsheet()
 
-        # استرجاع التقدم الدائم من الشيت
         current_idx, max_reached = load_progress()
         st.session_state[idx_key] = current_idx
         st.session_state[max_key] = max_reached
         st.session_state[next_key] = False
         st.session_state[form_key] = False
 
-        # حفظ التقدم فورًا للأمان
         save_progress(current_idx, max_reached)
 
     @staticmethod
@@ -490,27 +485,44 @@ def render_selection_buttons(qistas_data: dict, diwan_data: dict, current_index:
 
 def render_custom_form(reference_data: dict, current_index: int, total_records: int):
     st.markdown("---")
-    st.markdown("<h3 style='color: white !important; text-align: center;'>✍️ أدخل البيانات الصحيحة</h3>", unsafe_allow_html=True)
-    with st.form("custom_data_form"):
+    st.markdown("<h3 style='color: white !important; text-align: center;'>✍️ عدّل البيانات الصحيحة (كل الحقول)</h3>", unsafe_allow_html=True)
+    
+    # نستخدم بيانات قسطاس كأساس للتعديل (يمكن تغييره للديوان لو عايز)
+    base_data = reference_data.copy()
+    
+    with st.form("custom_data_form_full"):
         custom_data = {}
-        columns = list(reference_data.keys())
+        columns = list(base_data.keys())
+        
+        # عرض كل الحقول (حتى لو مش فاضية)
         num_cols = 3
         for i in range(0, len(columns), num_cols):
             cols = st.columns(num_cols)
             for j, col in enumerate(cols):
                 if i + j < len(columns):
                     field_name = columns[i + j]
-                    default_value = reference_data[field_name]
-                    custom_data[field_name] = col.text_input(field_name, value=str(default_value) if default_value else "")
+                    default_value = base_data.get(field_name, "")
+                    value_str = str(default_value) if default_value not in [None, "", pd.NaT] else ""
+                    custom_data[field_name] = col.text_input(
+                        field_name,
+                        value=value_str,
+                        key=f"custom_{field_name}_{current_index}"
+                    )
+        
         col1, col2 = st.columns(2)
         with col1:
-            if st.form_submit_button("حفظ والانتقال للتالي", use_container_width=True):
-                save_comparison_record(custom_data, 'مصدر آخر')
-                st.success("تم حفظ البيانات المخصصة!")
+            if st.form_submit_button("حفظ والانتقال للتالي", use_container_width=True, type="primary"):
+                # تنظيف القيم الفاضية
+                cleaned_data = {k: (v.strip() if v.strip() else "") for k, v in custom_data.items()}
+                
+                save_comparison_record(cleaned_data, 'مصدر آخر (معدل يدويًا)')
+                st.success("تم حفظ البيانات المعدلة يدويًا بنجاح!")
                 move_to_next_record(total_records, current_index)
+        
         with col2:
             if st.form_submit_button("إلغاء", use_container_width=True):
-                st.session_state[SessionManager.get_unique_key('show_custom_form')] = False
+                form_key = SessionManager.get_unique_key('show_custom_form')
+                st.session_state[form_key] = False
                 st.rerun()
 
 def render_navigation_buttons(current_index: int, total_records: int):
@@ -776,16 +788,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
