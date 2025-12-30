@@ -76,14 +76,6 @@ if not st.session_state.authenticated:
         password = st.text_input("كلمة المرور", type="password", placeholder="أدخل كلمة المرور")
         submit = st.form_submit_button("دخول", use_container_width=True)
         if submit:
-            # طباعة اللي دخلته
-            st.markdown("### اليوزر اللي كتبته:")
-            st.code(username)
-            st.markdown("### الباسورد اللي كتبته:")
-            st.code(password)
-
-            # طباعة كل البيانات الخام من الشيت
-            st.markdown("### البيانات الخام من الشيت 'Users' (كل خلية بالضبط):")
             try:
                 users_ws = spreadsheet.worksheet("Users")
                 all_values = users_ws.get_all_values()
@@ -102,7 +94,7 @@ if not st.session_state.authenticated:
                 st.success(f"✅ مرحباً {username}! دخلت بنجاح")
                 st.rerun()
             else:
-                st.error("❌ صحححححححححححها اسم مستخدم أو كلمة مرور غير صحيحة")
+                st.error("❌  اسم مستخدم أو كلمة مرور غير صحيحة")
     st.stop()
 
 # المستخدم مسجل دخول
@@ -789,6 +781,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
