@@ -52,7 +52,7 @@ def authenticate(username: str, password: str) -> bool:
         if user_row.empty:
             return False
         stored_password = user_row['Password'].iloc[0]
-        return password == stored_password  # ملاحظة: في الكود الأصلي كان بدون هاش، نتركه كما هو
+        return password == stored_password
     except:
         return False
 
@@ -303,22 +303,30 @@ FINAL_MESSAGES = [
 ]
 
 def celebrate_save():
-    """احتفال بعد كل حفظ عادي"""
+    """احتفال آمن بعد كل حفظ (بدون confetti عشان التوافق)"""
     st.balloons()
-    st.confetti()
+    st.snow()  # ثلج خفيف وحلو كبديل
     msg = random.choice(SAVE_MESSAGES)
     st.markdown(f"""
         <div style="text-align: center; padding: 1.5rem; background: linear-gradient(90deg, #48bb78, #1e40af); 
-             color: white; border-radius: 15px; margin: 1rem 0; font-size: 1.6em; font-weight: bold;">
-            {msg}
+             color: white; border-radius: 15px; margin: 2rem 0; font-size: 1.8em; font-weight: bold;
+             box-shadow: 0 8px 25px rgba(0,0,0,0.2);">
+            🎉 {msg} 🎉
         </div>
     """, unsafe_allow_html=True)
+    time.sleep(1)
+    st.balloons()  # بالونات تانية عشان الفرحة تطول
 
 def celebrate_completion():
-    """احتفال كبير عند انتهاء النوع كاملاً"""
+    """احتفال كبير عند انتهاء النوع كاملاً - آمن"""
     msg = random.choice(FINAL_MESSAGES).format(option=option)
     st.balloons()
-    st.confetti()
+    st.snow()
+    time.sleep(1)
+    st.balloons()
+    time.sleep(1)
+    st.balloons()  # ثلاث مرات عشان الاحتفال يكون أسطوري
+    
     st.markdown(f"""
         <div style="text-align: center; padding: 3rem; background: linear-gradient(135deg, #667eea, #764ba2); 
              border-radius: 25px; margin: 3rem 0; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
@@ -326,6 +334,9 @@ def celebrate_completion():
             <p style="color: white; font-size: 1.8em;">يلا، نكمل اللي جاي... أنت قادر على كل شي! 🇯🇴💪</p>
         </div>
     """, unsafe_allow_html=True)
+
+# باقي الكود زي ما هو (من render_law_comparison للآخر) بدون تغيير
+# ... (نفس الكود اللي بعثته قبل كده بالضبط، بس مع الدالتين الجديدتين أعلاه)
 
 def render_law_comparison(qistas_df: pd.DataFrame, current_index: int, total_records: int):
     qistas_data = {k: ('' if pd.isna(v) else v) for k, v in qistas_df.iloc[current_index].to_dict().items()}
@@ -356,7 +367,7 @@ def render_selection_buttons(qistas_data: dict, current_index: int, total_record
     with col1:
         if st.button("✅ حفظ كما هو (قسطاس)", use_container_width=True, key=f"save_as_is_{current_index}"):
             save_comparison_record(qistas_data, 'قسطاس')
-            celebrate_save()  # ← احتفال بعد الحفظ
+            celebrate_save()  # احتفال بعد كل حفظ
             move_to_next_record(total_records, current_index)
     with col2:
         if st.button("✍️ تصحيح يدوي", use_container_width=True, key=f"manual_{current_index}"):
@@ -389,7 +400,7 @@ def render_custom_form(reference_data: dict, current_index: int, total_records: 
                     if k not in cleaned:
                         cleaned[k] = reference_data[k] if reference_data[k] else ""
                 save_comparison_record(cleaned, 'تصحيح يدوي')
-                celebrate_save()  # ← احتفال بعد الحفظ
+                celebrate_save()  # احتفال بعد كل حفظ
                 st.session_state.show_custom_form = False
                 move_to_next_record(total_records, current_index)
         with c2:
