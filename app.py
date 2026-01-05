@@ -52,7 +52,7 @@ def authenticate(username: str, password: str) -> bool:
         if user_row.empty:
             return False
         stored_password = user_row['Password'].iloc[0]
-        return password == stored_password
+        return password == stored_password  # ملاحظة: في الكود الأصلي كان بدون هاش، نتركه كما هو
     except:
         return False
 
@@ -79,7 +79,6 @@ if not st.session_state.authenticated:
 
 user_name = st.session_state.user_name
 st.sidebar.success(f"👤 المستخدم: {user_name}")
-
 if st.sidebar.button("تسجيل الخروج"):
     st.session_state.authenticated = False
     st.session_state.user_name = None
@@ -174,15 +173,12 @@ class SessionManager:
         comp_key = SessionManager.get_unique_key("comparison_data")
         idx_key = SessionManager.get_unique_key("current_index")
         max_key = SessionManager.get_unique_key("max_reached_idx")
-
         if comp_key not in st.session_state:
             st.session_state[comp_key] = load_from_gsheet(option)
-
         current_idx, max_reached = load_progress()
         st.session_state[idx_key] = current_idx
         st.session_state[max_key] = max_reached
         st.session_state.show_custom_form = False
-
         save_progress(current_idx, max_reached)
 
     @staticmethod
@@ -282,7 +278,18 @@ FIELD_LABELS = {
 }
 
 # ==================== رسائل تحفيزية أردنية أصيلة ====================
-MOTIVATIONAL_MESSAGES = [
+SAVE_MESSAGES = [
+    "عييييش! كفو عليك يا أسد 🦁",
+    "الله يعطيك العافية يا غالي! شغل نظيف 👏",
+    "يا زلمة إبداع! استمر هيك 💪",
+    "هيييه! تمام يا بطل الأردن 🇯🇴",
+    "والله فخورين فيك! يلا عالتالي 🚀",
+    "كفو والله! دير بالك أنت صاروخ ⚡",
+    "يا سلام عليك! كل حفظ وأنت طيب 🌟",
+    "مبروك الحفظ! أنت الأفضل 😎",
+]
+
+FINAL_MESSAGES = [
     "🎉 يا سلام عليك! خلّصت {option} كلها، والله إنك قوي!",
     "👏 الله يعطيك العافية يا غالي! مراجعة نظيفة 100%!",
     "💪 دير بالك، أنت أسد اليوم! خلّصت كل {option} زي الحلاوة!",
@@ -295,15 +302,26 @@ MOTIVATIONAL_MESSAGES = [
     "❤️ والله فخورين فيك يا بطل الأردن! استمر هيك!",
 ]
 
-def celebrate_completion():
-    """احتفال كبير بلهجة أردنية حلوة عند الانتهاء من نوع تشريع"""
-    msg = random.choice(MOTIVATIONAL_MESSAGES).format(option=option)
-    
+def celebrate_save():
+    """احتفال بعد كل حفظ عادي"""
     st.balloons()
     st.confetti()
-    
+    msg = random.choice(SAVE_MESSAGES)
     st.markdown(f"""
-        <div style="text-align: center; padding: 3rem; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 25px; margin: 3rem 0; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+        <div style="text-align: center; padding: 1.5rem; background: linear-gradient(90deg, #48bb78, #1e40af); 
+             color: white; border-radius: 15px; margin: 1rem 0; font-size: 1.6em; font-weight: bold;">
+            {msg}
+        </div>
+    """, unsafe_allow_html=True)
+
+def celebrate_completion():
+    """احتفال كبير عند انتهاء النوع كاملاً"""
+    msg = random.choice(FINAL_MESSAGES).format(option=option)
+    st.balloons()
+    st.confetti()
+    st.markdown(f"""
+        <div style="text-align: center; padding: 3rem; background: linear-gradient(135deg, #667eea, #764ba2); 
+             border-radius: 25px; margin: 3rem 0; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
             <h1 style="color: white; font-size: 3em; margin-bottom: 1rem;">{msg}</h1>
             <p style="color: white; font-size: 1.8em;">يلا، نكمل اللي جاي... أنت قادر على كل شي! 🇯🇴💪</p>
         </div>
@@ -311,42 +329,35 @@ def celebrate_completion():
 
 def render_law_comparison(qistas_df: pd.DataFrame, current_index: int, total_records: int):
     qistas_data = {k: ('' if pd.isna(v) else v) for k, v in qistas_df.iloc[current_index].to_dict().items()}
-
     st.markdown("<h3 style='color: #667eea !important; text-align: center;'>بيانات قسطاس</h3>", unsafe_allow_html=True)
-
     DISPLAY_FIELDS = [
         ("اسم التشريع", "leg_name"), ("رقم التشريع", "leg_number"), ("السنة", "year"),
         ("رقم الجريدة", "magazine_number"), ("صفحة الجريدة", "magazine_page"), ("تاريخ الجريدة", "magazine_date"),
         ("تاريخ السريان", "start_date"), ("يحل محل", "replaced_for"), ("الحالة", "status"),
         ("ألغي بواسطة", "cancelled_by"), ("تاريخ الانتهاء", "end_date"),
     ]
-
     rows = []
     for label, key in DISPLAY_FIELDS:
         val = qistas_data.get(key, '')
         display_val = '—' if str(val).strip() == '' else str(val)
         rows.append((label, display_val))
-
     html = ["<div class='cmp-wrapper'><table class='cmp-table'>"]
     html.append("<thead><tr><th>اسم الحقل</th><th>القيمة</th></tr></thead><tbody>")
     for label, val in rows:
         html.append(f"<tr><td>{label}</td><td>{val}</td></tr>")
     html.append("</tbody></table></div>")
     st.markdown("\n".join(html), unsafe_allow_html=True)
-
     render_selection_buttons(qistas_data, current_index, total_records)
 
 def render_selection_buttons(qistas_data: dict, current_index: int, total_records: int):
     st.markdown("---")
     st.markdown("<h3 style='color: white; text-align: center;'>احفظ البيانات الصحيحة</h3>", unsafe_allow_html=True)
-
     col1, col2 = st.columns(2)
     with col1:
         if st.button("✅ حفظ كما هو (قسطاس)", use_container_width=True, key=f"save_as_is_{current_index}"):
             save_comparison_record(qistas_data, 'قسطاس')
-            st.success("تم الحفظ!")
+            celebrate_save()  # ← احتفال بعد الحفظ
             move_to_next_record(total_records, current_index)
-
     with col2:
         if st.button("✍️ تصحيح يدوي", use_container_width=True, key=f"manual_{current_index}"):
             st.session_state.show_custom_form = True
@@ -358,21 +369,18 @@ def render_selection_buttons(qistas_data: dict, current_index: int, total_record
 def render_custom_form(reference_data: dict, current_index: int, total_records: int):
     st.markdown("---")
     st.markdown("<h3 style='color: white; text-align: center;'>تصحيح يدوي</h3>", unsafe_allow_html=True)
-
     with st.form("custom_form", clear_on_submit=False):
         custom_data = {}
         cols_list = st.columns(3)
         ordered_keys = ["leg_name", "leg_number", "year", "magazine_number", "magazine_page",
                         "magazine_date", "start_date", "replaced_for", "status", "cancelled_by", "end_date"]
         fields = [k for k in ordered_keys if k in reference_data] + [k for k in reference_data if k not in ordered_keys]
-
         for i, key in enumerate(fields):
             with cols_list[i % 3]:
                 label = FIELD_LABELS.get(key, key)
                 val = reference_data.get(key, "")
                 value_str = str(val) if val else ""
                 custom_data[key] = st.text_input(label, value=value_str)
-
         c1, c2 = st.columns(2)
         with c1:
             if st.form_submit_button("حفظ والتالي", use_container_width=True):
@@ -381,8 +389,8 @@ def render_custom_form(reference_data: dict, current_index: int, total_records: 
                     if k not in cleaned:
                         cleaned[k] = reference_data[k] if reference_data[k] else ""
                 save_comparison_record(cleaned, 'تصحيح يدوي')
+                celebrate_save()  # ← احتفال بعد الحفظ
                 st.session_state.show_custom_form = False
-                st.success("تم الحفظ!")
                 move_to_next_record(total_records, current_index)
         with c2:
             if st.form_submit_button("إلغاء", use_container_width=True):
@@ -403,7 +411,6 @@ def save_comparison_record(data: dict, source: str) -> None:
 def move_to_next_record(total_records: int, current_index: int) -> None:
     idx_key = SessionManager.get_unique_key("current_index")
     max_key = SessionManager.get_unique_key("max_reached_idx")
-
     if current_index + 1 < total_records:
         st.session_state[idx_key] += 1
         st.session_state[max_key] = max(st.session_state.get(max_key, 0), current_index + 1)
@@ -421,14 +428,12 @@ def render_navigation_buttons(current_index: int, total_records: int):
     col1, _, col3 = st.columns([1, 2, 1])
     idx_key = SessionManager.get_unique_key("current_index")
     max_key = SessionManager.get_unique_key("max_reached_idx")
-
     with col1:
         if current_index > 0 and st.button("⏮️ السابق", use_container_width=True):
             st.session_state[idx_key] -= 1
             st.session_state.show_custom_form = False
             save_progress(st.session_state[idx_key], st.session_state[max_key])
             st.rerun()
-
     with col3:
         if current_index < total_records - 1 and current_index < st.session_state.get(max_key, 0):
             if st.button("⏭️ التالي", use_container_width=True, type="primary"):
@@ -441,7 +446,6 @@ def render_comparison_tab(qistas_df: pd.DataFrame):
     total_records = len(qistas_df)
     current_index = st.session_state[SessionManager.get_unique_key("current_index")]
     progress = int(((current_index + 1) / total_records) * 100) if total_records else 0
-
     st.markdown(f"""
         <div class='wizard-container'>
             <h3 style='color: #667eea; text-align: center;'>مراجعة التشريعات - {option}</h3>
@@ -450,10 +454,8 @@ def render_comparison_tab(qistas_df: pd.DataFrame):
             </p>
         </div>
     """, unsafe_allow_html=True)
-
     render_wizard_steps(current_index, total_records)
     st.markdown(f"<div style='background: #e2e8f0; height: 15px; border-radius: 10px; overflow: hidden; margin: 2rem 0;'><div style='height: 100%; background: linear-gradient(90deg, #667eea, #48bb78); width: {progress}%;'></div></div>", unsafe_allow_html=True)
-
     if current_index < total_records:
         render_law_comparison(qistas_df, current_index, total_records)
         render_navigation_buttons(current_index, total_records)
@@ -466,13 +468,11 @@ def render_comparison_tab(qistas_df: pd.DataFrame):
             save_progress(0, 0)
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
-
     st.markdown("</div>", unsafe_allow_html=True)
 
 def render_saved_data_tab():
     st.markdown("<div class='comparison-card'>", unsafe_allow_html=True)
     st.markdown(f"<h2 style='color: #667eea; text-align: center;'>البيانات المحفوظة - {option}</h2>", unsafe_allow_html=True)
-
     data = st.session_state.get(SessionManager.get_unique_key("comparison_data"), [])
     if data:
         df = pd.DataFrame(data)
@@ -487,7 +487,6 @@ def render_saved_data_tab():
         )
     else:
         st.info("لا توجد بيانات محفوظة بعد.")
-
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ==================== البرنامج الرئيسي ====================
@@ -499,23 +498,18 @@ def main():
             <p style='color: #718096; font-size: 18px;'>مراجعة وتصحيح بيانات قسطاس - حفظ دائم لكل مستخدم</p>
         </div>
     """, unsafe_allow_html=True)
-
     initialize_session_state()
     qistas_df = load_qis_data(option)
-
     if qistas_df is None:
         st.error("فشل تحميل البيانات.")
         return
-
     if 'GroupKey' in qistas_df.columns:
         qistas_df = qistas_df.sort_values(by='GroupKey').reset_index(drop=True)
-
     tab1, tab2 = st.tabs(["مراجعة", "البيانات المحفوظة"])
     with tab1:
         render_comparison_tab(qistas_df)
     with tab2:
         render_saved_data_tab()
-
     st.markdown("<div style='text-align: center; color: white; padding: 1rem;'>نظام مراجعة التشريعات © 2026</div>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
