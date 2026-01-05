@@ -202,8 +202,8 @@ def save_persistent_data():
 @st.cache_data
 def load_qis_data(kind: str):
     PATHS = {
-        'نظام': r'Qistas\V02_All_Legs\V10_Bylaws.xlsx',
-        'قانون': r'Qistas\V02_All_Legs\V05_Laws.xlsx',
+        'نظام': r'Qistas/V02_All_Legs/V10_Bylaws.xlsx',
+        'قانون': r'Qistas/V02_All_Legs/V05_Laws.xlsx',
     }
     if kind not in PATHS:
         st.error("النوع غير مدعوم.")
@@ -490,3 +490,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
