@@ -22,14 +22,14 @@ try:
     creds = Credentials.from_service_account_info(st.secrets["google"], scopes=scopes)
     client = gspread.authorize(creds)
 
-    SPREADSHEET_NAME = "Diwan_Legs"     
+    SPREADSHEET_NAME = "Diwan_Legs"  # تم التعديل ليطابق الملف الموجود عندك
 
     st.info("جاري الاتصال بـ Google Sheets...")
     spreadsheet = client.open(SPREADSHEET_NAME)
     st.success("✔️ تم الاتصال بنجاح بـ Google Sheets!")
 
 except gspread.exceptions.SpreadsheetNotFound:
-    st.error("❌ الملف 'Diwan_Legs_Review' مش موجود. أنشئه يدويًا أول مرة.")
+    st.error("❌ الملف 'Diwan_Legs' مش موجود. تأكد من الاسم أو أنشئه يدويًا.")
     st.stop()
 except Exception as e:
     st.error("❌ خطأ في الاتصال بـ Google Sheets")
@@ -220,7 +220,7 @@ def load_qis_data(kind: str):
         st.error(f"خطأ في التحميل: {e}")
         return None
 
-# ==================== باقي الدوال (نفس السابق مع تعديلات بسيطة) ====================
+# ==================== التصميم ====================
 def apply_styles():
     st.markdown("""
         <style>
@@ -490,4 +490,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
