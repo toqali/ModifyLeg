@@ -12,6 +12,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 import hashlib
 import time
+import random
 
 # ==================== ربط Google Sheets ====================
 try:
@@ -21,13 +22,10 @@ try:
     ]
     creds = Credentials.from_service_account_info(st.secrets["google"], scopes=scopes)
     client = gspread.authorize(creds)
-
-    SPREADSHEET_NAME = "Diwan_Legs"  # تم التعديل ليطابق الملف الموجود عندك
-
+    SPREADSHEET_NAME = "Diwan_Legs"
     st.info("جاري الاتصال بـ Google Sheets...")
     spreadsheet = client.open(SPREADSHEET_NAME)
     st.success("✔️ تم الاتصال بنجاح بـ Google Sheets!")
-
 except gspread.exceptions.SpreadsheetNotFound:
     st.error("❌ الملف 'Diwan_Legs' مش موجود. تأكد من الاسم أو أنشئه يدويًا.")
     st.stop()
@@ -54,7 +52,7 @@ def authenticate(username: str, password: str) -> bool:
         if user_row.empty:
             return False
         stored_password = user_row['Password'].iloc[0]
-        return password == stored_password  # لو عايز تشفر، غيّر لـ hash_password(password) == stored_password
+        return password == stored_password
     except:
         return False
 
@@ -283,6 +281,34 @@ FIELD_LABELS = {
     "cancelled_by": "ألغي بواسطة", "end_date": "تاريخ الانتهاء",
 }
 
+# ==================== رسائل تحفيزية أردنية أصيلة ====================
+MOTIVATIONAL_MESSAGES = [
+    "🎉 يا سلام عليك! خلّصت {option} كلها، والله إنك قوي!",
+    "👏 الله يعطيك العافية يا غالي! مراجعة نظيفة 100%!",
+    "💪 دير بالك، أنت أسد اليوم! خلّصت كل {option} زي الحلاوة!",
+    "🌟 يا زلمة، شغلك فنان! مبروك الانتهاء من {option}!",
+    "🚀 والله إنك صاروخ! خلّصت {option} وصرت جاهز للي جاي!",
+    "🥳 هييييه! مبروك يا كبير، مراجعة {option} خلصت على أحسن ما يرام!",
+    "⚡ بسرعة البرق ودقة الصقر! الله يبارك فيك، خلّصت كل شي!",
+    "🎯 هدف في المرمى! يا عيني عليك، {option} كلها مراجعة ومضبوطة!",
+    "😎 يا معلم، شغلك نظيف زي الذهب! خلّصت {option} وأنت الأول!",
+    "❤️ والله فخورين فيك يا بطل الأردن! استمر هيك!",
+]
+
+def celebrate_completion():
+    """احتفال كبير بلهجة أردنية حلوة عند الانتهاء من نوع تشريع"""
+    msg = random.choice(MOTIVATIONAL_MESSAGES).format(option=option)
+    
+    st.balloons()
+    st.confetti()
+    
+    st.markdown(f"""
+        <div style="text-align: center; padding: 3rem; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 25px; margin: 3rem 0; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+            <h1 style="color: white; font-size: 3em; margin-bottom: 1rem;">{msg}</h1>
+            <p style="color: white; font-size: 1.8em;">يلا، نكمل اللي جاي... أنت قادر على كل شي! 🇯🇴💪</p>
+        </div>
+    """, unsafe_allow_html=True)
+
 def render_law_comparison(qistas_df: pd.DataFrame, current_index: int, total_records: int):
     qistas_data = {k: ('' if pd.isna(v) else v) for k, v in qistas_df.iloc[current_index].to_dict().items()}
 
@@ -386,8 +412,9 @@ def move_to_next_record(total_records: int, current_index: int) -> None:
         save_persistent_data()
         st.rerun()
     else:
-        st.balloons()
-        st.success("تم الانتهاء من جميع السجلات!")
+        celebrate_completion()
+        st.success(f"🎉 تم الانتهاء من مراجعة جميع سجلات {option} بنجاح!")
+        st.info("تقدر دلوقتي تغيّر النوع من القائمة الجانبية أو تبدأ من جديد.")
 
 def render_navigation_buttons(current_index: int, total_records: int):
     st.markdown("---")
@@ -431,11 +458,14 @@ def render_comparison_tab(qistas_df: pd.DataFrame):
         render_law_comparison(qistas_df, current_index, total_records)
         render_navigation_buttons(current_index, total_records)
     else:
-        st.success("🎉 تم الانتهاء من المراجعة!")
-        if st.button("🔄 بدء جديد"):
+        st.markdown("<div style='text-align: center; padding: 3rem;'>", unsafe_allow_html=True)
+        st.markdown("<h2 style='color: #667eea;'>تم الانتهاء من هذا النوع بنجاح! 🎯</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='font-size: 1.2em;'>اختر نوع تشريع آخر من الشريط الجانبي للمتابعة.</p>", unsafe_allow_html=True)
+        if st.button("🔄 بدء جديد لهذا النوع"):
             st.session_state[SessionManager.get_unique_key("current_index")] = 0
             save_progress(0, 0)
             st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -490,5 +520,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
