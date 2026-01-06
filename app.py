@@ -79,6 +79,7 @@ if not st.session_state.authenticated:
 
 user_name = st.session_state.user_name
 st.sidebar.success(f"👤 المستخدم: {user_name}")
+
 if st.sidebar.button("تسجيل الخروج"):
     st.session_state.authenticated = False
     st.session_state.user_name = None
@@ -314,41 +315,37 @@ FINAL_MESSAGES = [
 ]
 
 def celebrate_save():
-    """احتفال آمن بعد كل حفظ (بدون confetti عشان التوافق)"""
     st.balloons()
-    st.snow()  # ثلج خفيف وحلو كبديل
+    st.snow()
     msg = random.choice(SAVE_MESSAGES)
     st.markdown(f"""
-        <div style="text-align: center; padding: 1.5rem; background: linear-gradient(90deg, #48bb78, #1e40af); 
+        <div style="text-align: center; padding: 1.5rem; background: linear-gradient(90deg, #48bb78, #1e40af);
              color: white; border-radius: 15px; margin: 2rem 0; font-size: 1.8em; font-weight: bold;
              box-shadow: 0 8px 25px rgba(0,0,0,0.2);">
             🎉 {msg} 🎉
         </div>
     """, unsafe_allow_html=True)
     time.sleep(1)
-    st.balloons()  # بالونات تانية عشان الفرحة تطول
+    st.balloons()
 
 def celebrate_completion():
-    """احتفال كبير عند انتهاء النوع كاملاً - آمن"""
     msg = random.choice(FINAL_MESSAGES).format(option=option)
     st.balloons()
     st.snow()
     time.sleep(1)
     st.balloons()
     time.sleep(1)
-    st.balloons()  # ثلاث مرات عشان الاحتفال يكون أسطوري
-    
+    st.balloons()
+   
     st.markdown(f"""
-        <div style="text-align: center; padding: 3rem; background: linear-gradient(135deg, #667eea, #764ba2); 
+        <div style="text-align: center; padding: 3rem; background: linear-gradient(135deg, #667eea, #764ba2);
              border-radius: 25px; margin: 3rem 0; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
             <h1 style="color: white; font-size: 3em; margin-bottom: 1rem;">{msg}</h1>
             <p style="color: white; font-size: 1.8em;">يلا، نكمل اللي جاي... أنت قادر على كل شي! 🇯🇴💪</p>
         </div>
     """, unsafe_allow_html=True)
 
-# باقي الكود زي ما هو (من render_law_comparison للآخر) بدون تغيير
-# ... (نفس الكود اللي بعثته قبل كده بالضبط، بس مع الدالتين الجديدتين أعلاه)
-
+# ==================== عرض بيانات قسطاس ====================
 def render_law_comparison(qistas_df: pd.DataFrame, current_index: int, total_records: int):
     qistas_data = {k: ('' if pd.isna(v) else v) for k, v in qistas_df.iloc[current_index].to_dict().items()}
     st.markdown("<h3 style='color: #667eea !important; text-align: center;'>بيانات قسطاس</h3>", unsafe_allow_html=True)
@@ -378,46 +375,96 @@ def render_selection_buttons(qistas_data: dict, current_index: int, total_record
     with col1:
         if st.button("✅ حفظ كما هو (قسطاس)", use_container_width=True, key=f"save_as_is_{current_index}"):
             save_comparison_record(qistas_data, 'قسطاس')
-            celebrate_save()  # احتفال بعد كل حفظ
+            celebrate_save()
             move_to_next_record(total_records, current_index)
     with col2:
         if st.button("✍️ تصحيح يدوي", use_container_width=True, key=f"manual_{current_index}"):
             st.session_state.show_custom_form = True
             st.rerun()
-
     if st.session_state.get("show_custom_form", False):
         render_custom_form(qistas_data, current_index, total_records)
 
+# ==================== نموذج التصحيح اليدوي الجديد (جدول مقارنة) ====================
 def render_custom_form(reference_data: dict, current_index: int, total_records: int):
     st.markdown("---")
-    st.markdown("<h3 style='color: white; text-align: center;'>تصحيح يدوي</h3>", unsafe_allow_html=True)
-    with st.form("custom_form", clear_on_submit=False):
-        custom_data = {}
-        cols_list = st.columns(3)
-        ordered_keys = ["leg_name", "leg_number", "year", "magazine_number", "magazine_page",
-                        "magazine_date", "start_date", "replaced_for", "status", "cancelled_by", "end_date"]
-        fields = [k for k in ordered_keys if k in reference_data] + [k for k in reference_data if k not in ordered_keys]
-        for i, key in enumerate(fields):
-            with cols_list[i % 3]:
-                label = FIELD_LABELS.get(key, key)
-                val = reference_data.get(key, "")
-                value_str = str(val) if val else ""
-                custom_data[key] = st.text_input(label, value=value_str)
-        c1, c2 = st.columns(2)
+    st.markdown("<h3 style='color: white; text-align: center;'>تصحيح يدوي - قارن وقم بالتعديل</h3>", unsafe_allow_html=True)
+    
+    ordered_keys = [
+        "leg_name", "leg_number", "year", "magazine_number", "magazine_page",
+        "magazine_date", "start_date", "replaced_for", "status",
+        "cancelled_by", "end_date"
+    ]
+    
+    fields = [k for k in ordered_keys if k in reference_data]
+    fields += [k for k in reference_data.keys() if k not in ordered_keys]
+
+    with st.form("custom_edit_form", clear_on_submit=False):
+        st.markdown("""
+            <style>
+            .edit-table {width: 100%; border-collapse: collapse; direction: rtl; margin: 20px 0;}
+            .edit-table th {background: #1e40af; color: white; padding: 14px; text-align: center;}
+            .edit-table td {padding: 12px; text-align: center; border-bottom: 1px solid #e2e8f0;}
+            .edit-table tr:nth-child(even) td {background: #f8fafc;}
+            .edit-table .field-col {text-align: right !important; font-weight: 700; background: #f1f5f9;}
+            .edit-table .original-col {background: #fefce8; color: #92400e;}
+            .edit-table .changed-row td {background: #fee2e2 !important;}
+            </style>
+        """, unsafe_allow_html=True)
+
+        edited_data = {}
+
+        # إدخال البيانات عبر أعمدة
+        for key in fields:
+            label = FIELD_LABELS.get(key, key)
+            original_val = reference_data.get(key, "")
+            original_display = '—' if not original_val else str(original_val)
+
+            col1, col2, col3 = st.columns([2, 2, 3])
+            with col1:
+                st.markdown(f"**{label}**")
+            with col2:
+                st.markdown(f"<div style='padding: 10px; background: #fefce8; border-radius: 8px; text-align: center;'>{original_display}</div>", unsafe_allow_html=True)
+            with col3:
+                new_val = st.text_input(
+                    label,
+                    value=str(original_val) if original_val else "",
+                    key=f"edit_{key}_{current_index}",
+                    label_visibility="collapsed"
+                )
+                edited_data[key] = new_val.strip() if new_val.strip() else (str(original_val) if original_val else "")
+
+        # جدول الملخص الجمالي
+        html = ['<table class="edit-table">']
+        html.append("<thead><tr><th>اسم الحقل</th><th>بيانات قسطاس (الأصلية)</th><th>التعديل الجديد</th></tr></thead><tbody>")
+
+        for key in fields:
+            label = FIELD_LABELS.get(key, key)
+            original_val = reference_data.get(key, "")
+            original_display = '—' if not original_val else str(original_val)
+            current_val = edited_data.get(key, original_val)
+            current_display = '—' if not current_val else str(current_val)
+            
+            row_class = 'class="changed-row"' if str(current_val) != str(original_val) else ''
+            html.append(f"<tr {row_class}><td class='field-col'>{label}</td><td class='original-col'>{original_display}</td><td>{current_display}</td></tr>")
+
+        html.append("</tbody></table>")
+        st.markdown("\n".join(html), unsafe_allow_html=True)
+
+        st.markdown("---")
+        c1, c2, c3 = st.columns([1, 1, 3])
         with c1:
-            if st.form_submit_button("حفظ والتالي", use_container_width=True):
-                cleaned = {k: v.strip() if v else "" for k, v in custom_data.items()}
-                for k in reference_data:
-                    if k not in cleaned:
-                        cleaned[k] = reference_data[k] if reference_data[k] else ""
-                save_comparison_record(cleaned, 'تصحيح يدوي')
-                celebrate_save()  # احتفال بعد كل حفظ
+            if st.form_submit_button("✅ حفظ والتالي", use_container_width=True, type="primary"):
+                final_data = {k: edited_data.get(k, reference_data.get(k, "")) for k in reference_data}
+                save_comparison_record(final_data, 'تصحيح يدوي')
+                celebrate_save()
                 st.session_state.show_custom_form = False
                 move_to_next_record(total_records, current_index)
         with c2:
-            if st.form_submit_button("إلغاء", use_container_width=True):
+            if st.form_submit_button("❌ إلغاء", use_container_width=True):
                 st.session_state.show_custom_form = False
                 st.rerun()
+        with c3:
+            st.caption("💡 إذا لم تقم بتغيير قيمة، ستُحفظ القيمة الأصلية من قسطاس تلقائيًا.")
 
 def save_comparison_record(data: dict, source: str) -> None:
     comp_key = SessionManager.get_unique_key("comparison_data")
@@ -536,4 +583,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
