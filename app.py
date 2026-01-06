@@ -1,191 +1,151 @@
 """
 نظام مراجعة التشريعات القانونية
-مراجعة وتصحيح بيانات قسطاس - مع تسجيل دخول وحفظ دائم على Google Sheets
-جاهز للعمل 100% - يناير 2026
+مراجعة وتصحيح بيانات قانونية
 """
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 import io
 import os
-import gspread
-from google.oauth2.service_account import Credentials
-import hashlib
-import time
-import random
-
-# ==================== ربط Google Sheets ====================
-try:
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
-    ]
-    creds = Credentials.from_service_account_info(st.secrets["google"], scopes=scopes)
-    client = gspread.authorize(creds)
-    SPREADSHEET_NAME = "Diwan_Legs"
-    st.info("جاري الاتصال بـ Google Sheets...")
-    spreadsheet = client.open(SPREADSHEET_NAME)
-    st.success("✔️ تم الاتصال بنجاح بـ Google Sheets!")
-except gspread.exceptions.SpreadsheetNotFound:
-    st.error("❌ الملف 'Diwan_Legs' مش موجود. تأكد من الاسم أو أنشئه يدويًا.")
-    st.stop()
-except Exception as e:
-    st.error("❌ خطأ في الاتصال بـ Google Sheets")
-    st.code(str(e))
-    st.stop()
-
-# ==================== دوال تسجيل الدخول ====================
-def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
-
-def authenticate(username: str, password: str) -> bool:
-    try:
-        users_ws = spreadsheet.worksheet("Users")
-        records = users_ws.get_all_records()
-        if not records:
-            return False
-        users_df = pd.DataFrame(records)
-        users_df.columns = users_df.columns.str.strip()
-        if 'Username' not in users_df.columns or 'Password' not in users_df.columns:
-            return False
-        user_row = users_df[users_df['Username'] == username]
-        if user_row.empty:
-            return False
-        stored_password = user_row['Password'].iloc[0]
-        return password == stored_password
-    except:
-        return False
-
-# ==================== جلسة تسجيل الدخول ====================
-if 'authenticated' not in st.session_state:
-    st.session_state.authenticated = False
-    st.session_state.user_name = None
-
-if not st.session_state.authenticated:
-    st.markdown("<h1 style='text-align: center; color: #667eea;'>🔐 تسجيل الدخول</h1>", unsafe_allow_html=True)
-    with st.form("login_form", clear_on_submit=False):
-        username = st.text_input("اسم المستخدم", placeholder="مثال: user1")
-        password = st.text_input("كلمة المرور", type="password")
-        submit = st.form_submit_button("دخول", use_container_width=True)
-        if submit:
-            if authenticate(username, password):
-                st.session_state.authenticated = True
-                st.session_state.user_name = username
-                st.success(f"✅ مرحباً {username}!")
-                st.rerun()
-            else:
-                st.error("❌ بيانات الدخول غير صحيحة")
-    st.stop()
-
-user_name = st.session_state.user_name
-st.sidebar.success(f"👤 المستخدم: {user_name}")
-
-if st.sidebar.button("تسجيل الخروج"):
-    st.session_state.authenticated = False
-    st.session_state.user_name = None
-    st.rerun()
+import json
 
 # ==================== إعدادات الصفحة ====================
 st.set_page_config(
-    page_title="نظام مراجعة التشريعات",
+    page_title="نظام مراجعة التشريعات القانونية",
     page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 st.sidebar.title("نوع التشريع")
-option = st.sidebar.radio("اختر نوع البيانات:", ["نظام", "قانون"])
+option = st.sidebar.radio(
+    "اختر نوع البيانات:",
+    ["نظام", "قانون"],
+)
 
-# ==================== دوال Google Sheets ====================
-def get_worksheet(base_name: str, suffix: str = ""):
-    sheet_title = f"{user_name}_{base_name}"
-    if suffix:
-        sheet_title += f"_{suffix}"
-    try:
-        return spreadsheet.worksheet(sheet_title)
-    except gspread.exceptions.WorksheetNotFound:
-        st.info(f"إنشاء ورقة جديدة: {sheet_title}")
-        return spreadsheet.add_worksheet(title=sheet_title, rows=1000, cols=30)
+# ==================== ملفات منفصلة لكل نوع تشريع ====================
+DATA_FILES = {
+    'نظام': 'Bylaw_Comparison.json',
+    'قانون': 'Law_Comparison.json',
+}
+PROGRESS_FILES = {
+    'نظام': 'Bylaw_Progress.json',
+    'قانون': 'Law_Progress.json',
+}
+COMPARISON_OUTPUTS = {
+    'نظام': 'Bylaws_Comparison_Saved.xlsx',
+    'قانون': 'Laws_Comparison_Saved.xlsx',
+}
+COMPARISON_FILE = COMPARISON_OUTPUTS[option]
+DATA_FILE = DATA_FILES[option]
+PROGRESS_FILE = PROGRESS_FILES[option]
 
-def save_to_gsheet(data: list, base_name: str):
-    ws = get_worksheet(base_name)
-    if not data:
-        ws.clear()
-        ws.append_row(["لا توجد بيانات محفوظة"])
-        return
-    df = pd.DataFrame(data)
-    df = df.fillna("")
-    df = df.astype(str)
+@st.cache_data
+def load_qis_data(kind: str):
+    PATHS = {
+        'نظام': r'Qistas\V02_All_Legs\V10_Bylaws.xlsx',
+        'قانون': r'Qistas\V02_All_Legs\V05_Laws.xlsx',
+    }
+    if kind not in PATHS:
+        st.error(f"النوع '{kind}' غير مدعوم حاليًا.")
+        return None
+    qis_path = PATHS[kind]
+    if not os.path.exists(qis_path):
+        st.error(f"الملف غير موجود ← {qis_path}")
+        return None
     try:
-        ws.clear()
-        ws.update([df.columns.values.tolist()] + df.values.tolist())
-        time.sleep(1.5)
+        df = pd.read_excel(qis_path)
+        st.sidebar.success(f"تم تحميل قسطاس ({os.path.basename(qis_path)})")
+        return df
     except Exception as e:
-        st.error("خطأ في الحفظ على Google Sheets")
-        st.code(str(e))
+        st.error(f"فشل تحميل ملف قسطاس:\n{qis_path}\n\n{str(e)}")
+        return None
 
-def load_from_gsheet(base_name: str) -> list:
+# ==================== قاموس الترجمة للحقول ====================
+FIELD_LABELS = {
+    "leg_name": "اسم التشريع",
+    "leg_number": "رقم التشريع",
+    "year": "السنة",
+    "magazine_number": "رقم الجريدة",
+    "magazine_page": "صفحة الجريدة",
+    "magazine_date": "تاريخ الجريدة",
+    "start_date": "تاريخ السريان",
+    "replaced_for": "يحل محل",
+    "status": "الحالة",
+    "cancelled_by": "ألغي بواسطة",
+    "end_date": "تاريخ الانتهاء",
+}
+
+# ==================== دوال عامة ====================
+def save_to_file(filename: str, data) -> None:
     try:
-        ws = get_worksheet(base_name)
-        records = ws.get_all_records()
-        return records if records else []
-    except:
-        return []
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        st.error(f"خطأ في حفظ البيانات: {str(e)}")
 
-def get_progress_worksheet():
-    sheet_title = f"{user_name}_تقدم_{option}"
+def load_from_file(filename: str):
     try:
-        return spreadsheet.worksheet(sheet_title)
-    except gspread.exceptions.WorksheetNotFound:
-        ws = spreadsheet.add_worksheet(title=sheet_title, rows=100, cols=3)
-        ws.append_row(["current_index", "max_reached_idx", "last_updated"])
-        ws.append_row(["0", "0", datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
-        return ws
+        if os.path.exists(filename):
+            with open(filename, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        st.error(f"خطأ في تحميل البيانات: {str(e)}")
+    return None
 
-def save_progress(current_idx: int, max_reached: int):
-    ws = get_progress_worksheet()
-    try:
-        ws.clear()
-        ws.append_row(["current_index", "max_reached_idx", "last_updated"])
-        ws.append_row([str(current_idx), str(max_reached), datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
-        time.sleep(1)
-    except:
-        pass
-
-def load_progress() -> tuple[int, int]:
-    try:
-        ws = get_progress_worksheet()
-        records = ws.get_all_records()
-        if records:
-            last = records[-1]
-            return int(last.get("current_index", 0)), int(last.get("max_reached_idx", 0))
-        return 0, 0
-    except:
-        return 0, 0
-
-# ==================== Session Manager ====================
 class SessionManager:
     @staticmethod
-    def get_unique_key(base: str) -> str:
-        return f"{base}_{option}_{user_name}"
+    def get_current_files():
+        return DATA_FILE, PROGRESS_FILE
+   
+    @staticmethod
+    def get_unique_key(base_key: str) -> str:
+        return f"{base_key}_{option.replace(' ', '_')}"
 
     @staticmethod
     def initialize():
-        comp_key = SessionManager.get_unique_key("comparison_data")
-        idx_key = SessionManager.get_unique_key("current_index")
-        max_key = SessionManager.get_unique_key("max_reached_idx")
+        data_file, progress_file = SessionManager.get_current_files()
+        comp_key = SessionManager.get_unique_key('comparison_data')
+        idx_key = SessionManager.get_unique_key('current_index')
+        form_key = SessionManager.get_unique_key('show_custom_form')
+        next_key = SessionManager.get_unique_key('show_next_in_review')
+        max_key = SessionManager.get_unique_key('max_reached_idx')
+       
         if comp_key not in st.session_state:
-            st.session_state[comp_key] = load_from_gsheet(option)
-        current_idx, max_reached = load_progress()
-        st.session_state[idx_key] = current_idx
-        st.session_state[max_key] = max_reached
-        st.session_state.show_custom_form = False
-        save_progress(current_idx, max_reached)
+            saved = load_from_file(data_file)
+            st.session_state[comp_key] = saved if saved is not None else []
+
+        if idx_key not in st.session_state:
+            saved_progress = load_from_file(progress_file)
+            if saved_progress and isinstance(saved_progress, dict):
+                st.session_state[idx_key] = saved_progress.get('current_index', 0)
+                st.session_state[max_key] = saved_progress.get('max_reached_idx', 0)
+            elif saved_progress is not None:
+                st.session_state[idx_key] = saved_progress
+                st.session_state[max_key] = saved_progress
+            else:
+                st.session_state[idx_key] = 0
+                st.session_state[max_key] = 0
+
+        if form_key not in st.session_state: st.session_state[form_key] = False
+        if next_key not in st.session_state: st.session_state[next_key] = False
+        if max_key not in st.session_state: st.session_state[max_key] = 0
 
     @staticmethod
     def save_persistent():
-        comp_key = SessionManager.get_unique_key("comparison_data")
-        save_to_gsheet(st.session_state[comp_key], option)
+        data_file, progress_file = SessionManager.get_current_files()
+        try:
+            comp_key = SessionManager.get_unique_key('comparison_data')
+            idx_key = SessionManager.get_unique_key('current_index')
+            max_key = SessionManager.get_unique_key('max_reached_idx')
+            progress_data = {
+                'current_index': st.session_state[idx_key],
+                'max_reached_idx': st.session_state.get(max_key, 0)
+            }
+            save_to_file(data_file, st.session_state[comp_key])
+            save_to_file(progress_file, progress_data)
+        except Exception as e:
+            st.error(f"فشل الحفظ التلقائي: {e}")
 
 def initialize_session_state():
     SessionManager.initialize()
@@ -193,29 +153,35 @@ def initialize_session_state():
 def save_persistent_data():
     SessionManager.save_persistent()
 
-# ==================== تحميل بيانات قسطاس ====================
-@st.cache_data
-def load_qis_data(kind: str):
-    PATHS = {
-        'نظام': r'V02_All_Legs/V10_Bylaws.xlsx',
-        'قانون': r'V02_All_Legs/V05_Laws.xlsx',
-    }
-    if kind not in PATHS:
-        st.error("النوع غير مدعوم.")
-        return None
-    path = PATHS[kind]
-    if not os.path.exists(path):
-        st.error(f"الملف غير موجود: {path}")
-        return None
-    try:
-        df = pd.read_excel(path)
-        st.sidebar.success(f"تم تحميل قسطاس - {kind}")
-        return df
-    except Exception as e:
-        st.error(f"خطأ في التحميل: {e}")
-        return None
+def get_legislation_data(index: int, source_df: pd.DataFrame) -> dict:
+    if index >= len(source_df):
+        return {}
+    row = source_df.iloc[index]
+    return {k: ('' if pd.isna(v) else v) for k, v in row.to_dict().items()}
 
-# ==================== التصميم ====================
+def save_comparison_record(data: dict, source: str) -> None:
+    comp_key = SessionManager.get_unique_key('comparison_data')
+    new_record = {
+        'تاريخ الإدخال': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        'المصدر': source,
+        **data
+    }
+    st.session_state[comp_key].append(new_record)
+    save_persistent_data()
+
+def move_to_next_record(total_records: int, current_index: int) -> None:
+    idx_key = SessionManager.get_unique_key('current_index')
+    max_key = SessionManager.get_unique_key('max_reached_idx')
+   
+    if current_index + 1 < total_records:
+        st.session_state[idx_key] += 1
+        st.session_state[max_key] = max(st.session_state.get(max_key, 0), current_index + 1)
+        save_persistent_data()
+        st.rerun()
+    else:
+        st.balloons()
+        st.success("🎉 تم الانتهاء من مراجعة جميع السجلات!")
+
 def apply_styles():
     st.markdown("""
         <style>
@@ -271,250 +237,134 @@ def render_wizard_steps(current_index: int, total_records: int):
                 </div>
             """, unsafe_allow_html=True)
 
-FIELD_LABELS = {
-    "leg_name": "اسم التشريع", "leg_number": "رقم التشريع", "year": "السنة",
-    "magazine_number": "رقم الجريدة", "magazine_page": "صفحة الجريدة", "magazine_date": "تاريخ الجريدة",
-    "start_date": "تاريخ السريان", "replaced_for": "يحل محل", "status": "الحالة",
-    "cancelled_by": "ألغي بواسطة", "end_date": "تاريخ الانتهاء",
-}
-
-# ==================== رسائل تحفيزية أردنية أصيلة ====================
-SAVE_MESSAGES = [
-    "عييييش! كفو عليك يا أسد 🦁",
-    "الله يعطيك العافية يا غالي! شغل نظيف 👏",
-    "يا زلمة إبداع! استمر هيك 💪",
-    "هيييه! تمام يا بطل الأردن 🇯🇴",
-    "والله فخورين فيك! يلا عالتالي 🚀",
-    "كفو والله! دير بالك أنت صاروخ ⚡",
-    "يا سلام عليك! كل حفظ وأنت طيب 🌟",
-    "مبروك الحفظ! أنت الأفضل 😎",
-    "عفيه عليك يا نشمي! خلصتها زي المنسف بالجميد 🔥",
-    "هيييه يا معلم! لو التشريعات بتفهم كانت صفقلك 👏👏",
-    "الله يعطيك العافية يا أسد الديوان! استمر ولا توقف 🦁",
-    "كفو يا كبير! أنت أسرع من النت في الكافيهات الأردنية ⚡",
-    "يا سلام! حفظتها وكأنك بتاكل كنافة نابلسية ساخنة 😋",
-    "والله إنك فنان يا زلمة! يلا عالتشريع الجاي، أنت قادر 💪",
-    "هسا خلصت؟ عيييش! أنت أقوى من القهوة السادة الصبح 🇯🇴☕",
-    "مبروك يا بطل! شغلك نظيف زي المناظر في البترا 🌟",
-    "دير بالك أنت صاروخ! لو كان في ميدالية مراجعة كنت أخذت الذهب 🥇",
-    "يا عيني عليك! كل حفظ وأنت بتجنن زي الزار في جرش 🎶",
-    "كفووو والله! خلصتها وكأنك طاير فوق وادي رم 🚀",
-]
-
-FINAL_MESSAGES = [
-    "🎉 يا سلام عليك! خلّصت {option} كلها، والله إنك قوي!",
-    "👏 الله يعطيك العافية يا غالي! مراجعة نظيفة 100%!",
-    "💪 دير بالك، أنت أسد اليوم! خلّصت كل {option} زي الحلاوة!",
-    "🌟 يا زلمة، شغلك فنان! مبروك الانتهاء من {option}!",
-    "🚀 والله إنك صاروخ! خلّصت {option} وصرت جاهز للي جاي!",
-    "🥳 هييييه! مبروك يا كبير، مراجعة {option} خلصت على أحسن ما يرام!",
-    "⚡ بسرعة البرق ودقة الصقر! الله يبارك فيك، خلّصت كل شي!",
-    "🎯 هدف في المرمى! يا عيني عليك، {option} كلها مراجعة ومضبوطة!",
-    "😎 يا معلم، شغلك نظيف زي الذهب! خلّصت {option} وأنت الأول!",
-    "❤️ والله فخورين فيك يا بطل الأردن! استمر هيك!",
-]
-
-def celebrate_save():
-    st.balloons()
-    st.snow()
-    msg = random.choice(SAVE_MESSAGES)
-    st.markdown(f"""
-        <div style="text-align: center; padding: 1.5rem; background: linear-gradient(90deg, #48bb78, #1e40af);
-             color: white; border-radius: 15px; margin: 2rem 0; font-size: 1.8em; font-weight: bold;
-             box-shadow: 0 8px 25px rgba(0,0,0,0.2);">
-            🎉 {msg} 🎉
-        </div>
-    """, unsafe_allow_html=True)
-    time.sleep(1)
-    st.balloons()
-
-def celebrate_completion():
-    msg = random.choice(FINAL_MESSAGES).format(option=option)
-    st.balloons()
-    st.snow()
-    time.sleep(1)
-    st.balloons()
-    time.sleep(1)
-    st.balloons()
-   
-    st.markdown(f"""
-        <div style="text-align: center; padding: 3rem; background: linear-gradient(135deg, #667eea, #764ba2);
-             border-radius: 25px; margin: 3rem 0; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
-            <h1 style="color: white; font-size: 3em; margin-bottom: 1rem;">{msg}</h1>
-            <p style="color: white; font-size: 1.8em;">يلا، نكمل اللي جاي... أنت قادر على كل شي! 🇯🇴💪</p>
-        </div>
-    """, unsafe_allow_html=True)
-
 # ==================== عرض بيانات قسطاس ====================
 def render_law_comparison(qistas_df: pd.DataFrame, current_index: int, total_records: int):
-    qistas_data = {k: ('' if pd.isna(v) else v) for k, v in qistas_df.iloc[current_index].to_dict().items()}
+    qistas_data = get_legislation_data(current_index, qistas_df)
     st.markdown("<h3 style='color: #667eea !important; text-align: center;'>بيانات قسطاس</h3>", unsafe_allow_html=True)
+
     DISPLAY_FIELDS = [
-        ("اسم التشريع", "leg_name"), ("رقم التشريع", "leg_number"), ("السنة", "year"),
-        ("رقم الجريدة", "magazine_number"), ("صفحة الجريدة", "magazine_page"), ("تاريخ الجريدة", "magazine_date"),
-        ("تاريخ السريان", "start_date"), ("يحل محل", "replaced_for"), ("الحالة", "status"),
-        ("ألغي بواسطة", "cancelled_by"), ("تاريخ الانتهاء", "end_date"),
+        ("اسم التشريع", "leg_name"),
+        ("رقم التشريع", "leg_number"),
+        ("السنة", "year"),
+        ("رقم الجريدة", "magazine_number"),
+        ("صفحة الجريدة", "magazine_page"),
+        ("تاريخ الجريدة", "magazine_date"),
+        ("تاريخ السريان", "start_date"),
+        ("يحل محل", "replaced_for"),
+        ("الحالة", "status"),
+        ("ألغي بواسطة", "cancelled_by"),
+        ("تاريخ الانتهاء", "end_date"),
     ]
+
     rows = []
     for label, key in DISPLAY_FIELDS:
         val = qistas_data.get(key, '')
-        display_val = '—' if str(val).strip() == '' else str(val)
+        display_val = '—' if pd.isna(val) or str(val).strip() == '' else str(val)
         rows.append((label, display_val))
-    html = ["<div class='cmp-wrapper'><table class='cmp-table'>"]
-    html.append("<thead><tr><th>اسم الحقل</th><th>القيمة</th></tr></thead><tbody>")
-    for label, val in rows:
-        html.append(f"<tr><td>{label}</td><td>{val}</td></tr>")
-    html.append("</tbody></table></div>")
-    st.markdown("\n".join(html), unsafe_allow_html=True)
+
+    if rows:
+        html = ["<div class='cmp-wrapper'><table class='cmp-table'>"]
+        html.append("<thead><tr><th>اسم الحقل</th><th>القيمة</th></tr></thead><tbody>")
+        for label, val in rows:
+            html.append(f"<tr><td>{label}</td><td>{val}</td></tr>")
+        html.append("</tbody></table></div>")
+        st.markdown("\n".join(html), unsafe_allow_html=True)
+    else:
+        st.info("لا توجد بيانات في هذا السجل.")
+
     render_selection_buttons(qistas_data, current_index, total_records)
 
 def render_selection_buttons(qistas_data: dict, current_index: int, total_records: int):
     st.markdown("---")
     st.markdown("<h3 style='color: white; text-align: center;'>احفظ البيانات الصحيحة</h3>", unsafe_allow_html=True)
+    
     col1, col2 = st.columns(2)
     with col1:
         if st.button("✅ حفظ كما هو (قسطاس)", use_container_width=True, key=f"save_as_is_{current_index}"):
             save_comparison_record(qistas_data, 'قسطاس')
-            celebrate_save()
+            st.success("تم الحفظ!")
             move_to_next_record(total_records, current_index)
+    
     with col2:
+        form_key = SessionManager.get_unique_key('show_custom_form')
         if st.button("✍️ تصحيح يدوي", use_container_width=True, key=f"manual_{current_index}"):
-            st.session_state.show_custom_form = True
+            st.session_state[form_key] = True
             st.rerun()
-    if st.session_state.get("show_custom_form", False):
+
+    if st.session_state.get(SessionManager.get_unique_key('show_custom_form'), False):
         render_custom_form(qistas_data, current_index, total_records)
 
-# ==================== نموذج التصحيح اليدوي الجديد (جدول مقارنة) ====================
+# ==================== نموذج التصحيح اليدوي (خانات عادية بسيطة) ====================
 def render_custom_form(reference_data: dict, current_index: int, total_records: int):
     st.markdown("---")
-    st.markdown("<h3 style='color: white; text-align: center;'>تصحيح يدوي - قارن وقم بالتعديل</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='color: white; text-align: center;'>تصحيح يدوي</h3>", unsafe_allow_html=True)
     
-    ordered_keys = [
-        "leg_name", "leg_number", "year", "magazine_number", "magazine_page",
-        "magazine_date", "start_date", "replaced_for", "status",
-        "cancelled_by", "end_date"
-    ]
-    
-    fields = [k for k in ordered_keys if k in reference_data]
-    fields += [k for k in reference_data.keys() if k not in ordered_keys]
-
-    with st.form("custom_edit_form", clear_on_submit=False):
-        st.markdown("""
-            <style>
-            .edit-table {width: 100%; border-collapse: collapse; direction: rtl; margin: 20px 0;}
-            .edit-table th {background: #1e40af; color: white; padding: 14px; text-align: center;}
-            .edit-table td {padding: 12px; text-align: center; border-bottom: 1px solid #e2e8f0;}
-            .edit-table tr:nth-child(even) td {background: #f8fafc;}
-            .edit-table .field-col {text-align: right !important; font-weight: 700; background: #f1f5f9;}
-            .edit-table .original-col {background: #fefce8; color: #92400e;}
-            .edit-table .changed-row td {background: #fee2e2 !important;}
-            </style>
-        """, unsafe_allow_html=True)
-
-        edited_data = {}
-
-        # إدخال البيانات عبر أعمدة
-        for key in fields:
-            label = FIELD_LABELS.get(key, key)
-            original_val = reference_data.get(key, "")
-            original_display = '—' if not original_val else str(original_val)
-
-            col1, col2, col3 = st.columns([2, 2, 3])
-            with col1:
-                st.markdown(f"**{label}**")
-            with col2:
-                st.markdown(f"<div style='padding: 10px; background: #fefce8; border-radius: 8px; text-align: center;'>{original_display}</div>", unsafe_allow_html=True)
-            with col3:
-                new_val = st.text_input(
-                    label,
-                    value=str(original_val) if original_val else "",
-                    key=f"edit_{key}_{current_index}",
-                    label_visibility="collapsed"
-                )
-                edited_data[key] = new_val.strip() if new_val.strip() else (str(original_val) if original_val else "")
-
-        # جدول الملخص الجمالي
-        html = ['<table class="edit-table">']
-        html.append("<thead><tr><th>اسم الحقل</th><th>بيانات قسطاس (الأصلية)</th><th>التعديل الجديد</th></tr></thead><tbody>")
+    with st.form("custom_form", clear_on_submit=False):
+        custom_data = {}
+        
+        ordered_keys = [
+            "leg_name", "leg_number", "year", "magazine_number", "magazine_page",
+            "magazine_date", "start_date", "replaced_for", "status",
+            "cancelled_by", "end_date"
+        ]
+        
+        fields = [k for k in ordered_keys if k in reference_data]
+        fields += [k for k in reference_data if k not in ordered_keys]  # أي حقول إضافية
 
         for key in fields:
             label = FIELD_LABELS.get(key, key)
-            original_val = reference_data.get(key, "")
-            original_display = '—' if not original_val else str(original_val)
-            current_val = edited_data.get(key, original_val)
-            current_display = '—' if not current_val else str(current_val)
+            value = reference_data.get(key, "")
+            value_str = str(value) if value else ""
             
-            row_class = 'class="changed-row"' if str(current_val) != str(original_val) else ''
-            html.append(f"<tr {row_class}><td class='field-col'>{label}</td><td class='original-col'>{original_display}</td><td>{current_display}</td></tr>")
-
-        html.append("</tbody></table>")
-        st.markdown("\n".join(html), unsafe_allow_html=True)
+            edited = st.text_input(label, value=value_str, key=f"edit_{key}_{current_index}")
+            custom_data[key] = edited.strip() if edited.strip() else value_str
 
         st.markdown("---")
-        c1, c2, c3 = st.columns([1, 1, 3])
-        with c1:
+        col1, col2 = st.columns(2)
+        with col1:
             if st.form_submit_button("✅ حفظ والتالي", use_container_width=True, type="primary"):
-                final_data = {k: edited_data.get(k, reference_data.get(k, "")) for k in reference_data}
+                # نضمن حفظ كل الحقول حتى لو ما تغيرت
+                final_data = {}
+                for k in reference_data:
+                    final_data[k] = custom_data.get(k, reference_data.get(k, ""))
+                
                 save_comparison_record(final_data, 'تصحيح يدوي')
-                celebrate_save()
-                st.session_state.show_custom_form = False
+                st.session_state[SessionManager.get_unique_key('show_custom_form')] = False
+                st.success("تم الحفظ بنجاح!")
                 move_to_next_record(total_records, current_index)
-        with c2:
+
+        with col2:
             if st.form_submit_button("❌ إلغاء", use_container_width=True):
-                st.session_state.show_custom_form = False
+                st.session_state[SessionManager.get_unique_key('show_custom_form')] = False
                 st.rerun()
-        with c3:
-            st.caption("💡 إذا لم تقم بتغيير قيمة، ستُحفظ القيمة الأصلية من قسطاس تلقائيًا.")
-
-def save_comparison_record(data: dict, source: str) -> None:
-    comp_key = SessionManager.get_unique_key("comparison_data")
-    new_record = {
-        'تاريخ الإدخال': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        'المصدر': source,
-        'المعدل بواسطة': user_name,
-        **data
-    }
-    st.session_state[comp_key].append(new_record)
-    save_persistent_data()
-
-def move_to_next_record(total_records: int, current_index: int) -> None:
-    idx_key = SessionManager.get_unique_key("current_index")
-    max_key = SessionManager.get_unique_key("max_reached_idx")
-    if current_index + 1 < total_records:
-        st.session_state[idx_key] += 1
-        st.session_state[max_key] = max(st.session_state.get(max_key, 0), current_index + 1)
-        st.session_state.show_custom_form = False
-        save_progress(st.session_state[idx_key], st.session_state[max_key])
-        save_persistent_data()
-        st.rerun()
-    else:
-        celebrate_completion()
-        st.success(f"🎉 تم الانتهاء من مراجعة جميع سجلات {option} بنجاح!")
-        st.info("تقدر دلوقتي تغيّر النوع من القائمة الجانبية أو تبدأ من جديد.")
 
 def render_navigation_buttons(current_index: int, total_records: int):
     st.markdown("---")
     col1, _, col3 = st.columns([1, 2, 1])
-    idx_key = SessionManager.get_unique_key("current_index")
-    max_key = SessionManager.get_unique_key("max_reached_idx")
+    idx_key = SessionManager.get_unique_key('current_index')
+    form_key = SessionManager.get_unique_key('show_custom_form')
+    max_key = SessionManager.get_unique_key('max_reached_idx')
+
     with col1:
         if current_index > 0 and st.button("⏮️ السابق", use_container_width=True):
             st.session_state[idx_key] -= 1
-            st.session_state.show_custom_form = False
-            save_progress(st.session_state[idx_key], st.session_state[max_key])
+            st.session_state[form_key] = False
+            save_persistent_data()
             st.rerun()
+
     with col3:
         if current_index < total_records - 1 and current_index < st.session_state.get(max_key, 0):
             if st.button("⏭️ التالي", use_container_width=True, type="primary"):
                 st.session_state[idx_key] += 1
-                save_progress(st.session_state[idx_key], st.session_state[max_key])
+                save_persistent_data()
                 st.rerun()
 
 def render_comparison_tab(qistas_df: pd.DataFrame):
     st.markdown("<div class='comparison-card'>", unsafe_allow_html=True)
     total_records = len(qistas_df)
-    current_index = st.session_state[SessionManager.get_unique_key("current_index")]
+    current_index = st.session_state[SessionManager.get_unique_key('current_index')]
     progress = int(((current_index + 1) / total_records) * 100) if total_records else 0
+
     st.markdown(f"""
         <div class='wizard-container'>
             <h3 style='color: #667eea; text-align: center;'>مراجعة التشريعات - {option}</h3>
@@ -523,62 +373,77 @@ def render_comparison_tab(qistas_df: pd.DataFrame):
             </p>
         </div>
     """, unsafe_allow_html=True)
+
     render_wizard_steps(current_index, total_records)
     st.markdown(f"<div style='background: #e2e8f0; height: 15px; border-radius: 10px; overflow: hidden; margin: 2rem 0;'><div style='height: 100%; background: linear-gradient(90deg, #667eea, #48bb78); width: {progress}%;'></div></div>", unsafe_allow_html=True)
+
     if current_index < total_records:
         render_law_comparison(qistas_df, current_index, total_records)
         render_navigation_buttons(current_index, total_records)
     else:
-        st.markdown("<div style='text-align: center; padding: 3rem;'>", unsafe_allow_html=True)
-        st.markdown("<h2 style='color: #667eea;'>تم الانتهاء من هذا النوع بنجاح! 🎯</h2>", unsafe_allow_html=True)
-        st.markdown("<p style='font-size: 1.2em;'>اختر نوع تشريع آخر من الشريط الجانبي للمتابعة.</p>", unsafe_allow_html=True)
-        if st.button("🔄 بدء جديد لهذا النوع"):
-            st.session_state[SessionManager.get_unique_key("current_index")] = 0
-            save_progress(0, 0)
+        st.success("🎉 تم الانتهاء من المراجعة!")
+        if st.button("🔄 بدء جديد"):
+            st.session_state[SessionManager.get_unique_key('current_index')] = 0
+            st.session_state[SessionManager.get_unique_key('show_custom_form')] = False
+            save_persistent_data()
             st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
+
     st.markdown("</div>", unsafe_allow_html=True)
 
 def render_saved_data_tab():
     st.markdown("<div class='comparison-card'>", unsafe_allow_html=True)
     st.markdown(f"<h2 style='color: #667eea; text-align: center;'>البيانات المحفوظة - {option}</h2>", unsafe_allow_html=True)
-    data = st.session_state.get(SessionManager.get_unique_key("comparison_data"), [])
+
+    comp_key = SessionManager.get_unique_key('comparison_data')
+    data = st.session_state.get(comp_key, [])
+    
     if data:
         df = pd.DataFrame(data)
         st.dataframe(df, use_container_width=True, hide_index=True)
         buffer = io.BytesIO()
         df.to_excel(buffer, index=False, engine='openpyxl')
-        st.download_button(
-            f"تحميل البيانات ({len(data)} سجل)",
-            buffer.getvalue(),
-            f"{user_name}_{option}_مراجعة_{datetime.now().strftime('%Y%m%d')}.xlsx",
-            use_container_width=True
-        )
+        st.download_button(f"تحميل البيانات ({len(data)} سجل)", buffer.getvalue(), COMPARISON_FILE, use_container_width=True)
+        
+        if st.button("مسح الكل", type="secondary"):
+            for f in [DATA_FILE, PROGRESS_FILE]:
+                if os.path.exists(f): os.remove(f)
+            st.session_state[comp_key] = []
+            st.session_state[SessionManager.get_unique_key('current_index')] = 0
+            st.success("تم المسح!")
+            st.rerun()
     else:
         st.info("لا توجد بيانات محفوظة بعد.")
+
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ==================== البرنامج الرئيسي ====================
 def main():
     apply_styles()
+    
     st.markdown("""
         <div class="title-container">
             <h1 style='color: #667eea;'>⚖️ نظام مراجعة التشريعات</h1>
-            <p style='color: #718096; font-size: 18px;'>مراجعة وتصحيح بيانات قسطاس - حفظ دائم لكل مستخدم</p>
+            <p style='color: #718096; font-size: 18px;'>مراجعة وتصحيح بيانات قسطاس</p>
         </div>
     """, unsafe_allow_html=True)
+    
     initialize_session_state()
+    
     qistas_df = load_qis_data(option)
+    
     if qistas_df is None:
-        st.error("فشل تحميل البيانات.")
+        st.error("فشل تحميل بيانات قسطاس. تأكد من المسار.")
         return
+
     if 'GroupKey' in qistas_df.columns:
         qistas_df = qistas_df.sort_values(by='GroupKey').reset_index(drop=True)
+
     tab1, tab2 = st.tabs(["مراجعة", "البيانات المحفوظة"])
     with tab1:
         render_comparison_tab(qistas_df)
     with tab2:
         render_saved_data_tab()
+
     st.markdown("<div style='text-align: center; color: white; padding: 1rem;'>نظام مراجعة التشريعات © 2026</div>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
