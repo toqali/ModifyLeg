@@ -23,7 +23,7 @@ try:
     ]
     creds = Credentials.from_service_account_info(st.secrets["google"], scopes=scopes)
     client = gspread.authorize(creds)
-    SPREADSHEET_NAME = "Leg_Meta_v2"
+    SPREADSHEET_NAME = "Diwan_Legs"
     st.info("جاري الاتصال بـ Google Sheets...")
     spreadsheet = client.open(SPREADSHEET_NAME)
     st.success("✔️ تم الاتصال بنجاح بـ Google Sheets!")
@@ -557,4 +557,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
