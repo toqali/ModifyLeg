@@ -384,8 +384,8 @@ def load_progress() -> tuple:
 # 5. بيانات JSON + دوال المساعدة
 # ────────────────────────────────────────────────
 DATA_PATHS = {
-    "قانون": r"Laws.json",
-    "نظام":  r"data/أنظمة.json",
+    "قانون ج1": r"Laws_p1.json",
+    "قانون ج2":  r"Laws_p2.json",
 }
 
 REQUIRED_KEYS = [
@@ -604,7 +604,7 @@ def main():
     st.set_page_config(page_title="منظومة مراجعة التشريعات", layout="wide", page_icon="⚖️")
 
     st.sidebar.markdown('<div class="sidebar-title">نوع التشريع</div>', unsafe_allow_html=True)
-    option = st.sidebar.radio("", ["قانون", "نظام"])
+    option = st.sidebar.radio("", ["قانون ج1", "قانون ج2"])
     st.session_state.option = option
 
     if "current_idx" not in st.session_state:
